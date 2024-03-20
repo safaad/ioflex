@@ -1,13 +1,9 @@
-# IO Flez Wrapper Library 
+# IO Flex Wrapper Library 
 ## pre-requisites
 Libconfuse
 
 https://github.com/libconfuse/libconfuse.git
 
-
-Libconfuse
-
-https://github.com/libconfuse/libconfuse.git
 
 ### MPT
 ```export MPI_SHEPHERD=true```

@@ -19,7 +19,10 @@
 
 #define DECL(__name) __name
 
-#define DLSYM(func) \
+#define IOFLEX_WRAPPER_MAP(__func,__ret,__args,__fcall) \
+    __ret __func __args __attribute__ ((alias (#__fcall)));
+
+#define MAP_OR_FAIL(func) \
     if(!(__real_ ## func)) \
     { \
         __real_ ## func = dlsym(RTLD_NEXT, #func); \

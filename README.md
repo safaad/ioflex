@@ -1,5 +1,5 @@
 # IOFlex 
-IOFlex is a portable I/O wrapper tool that transperantly sets I/O configurations for HPC programs. IOFlex can be used to optimize IO for HPC applications without changing the source code. IOFlex overrides hints set using environment variables and MPI_Info_set().
+IOFlex is a portable I/O wrapper tool that transperantly sets I/O configurations for HPC applications. IOFlex can be used to optimize IO for HPC applications without changing the source code. It overrides hints set using environment variables and MPI_Info_set().
 
 ## Instructions
 ### Prerequisites
@@ -7,15 +7,12 @@ IOFlex is a portable I/O wrapper tool that transperantly sets I/O configurations
 - libconfuse: https://github.com/libconfuse/libconfuse.git
 
 ### Building and Installation
-1. If  ```configure``` is missing run ```./autogen.sh``` to generate the configure script.
-2. Run ```./configure```. Use ```./configure --help``` to get full list of options.
-3. Run ```make```
-4. Run ```make install```. By default, ioflex is installed in `pwd` the prefix can be changed via ```./configure --prefix=...```
-```
-> ./autogen.sh
+
+```bash
+$ ./autogen.sh
 # By default, ioflex is installed in `pwd` if not changed via --prefix
-> ./configure --with-libconfuse=<path to libconfuse> --prefix=<path to install dir>
-> make && make install
+$ ./configure --with-libconfuse=<path to libconfuse> --prefix=<path to install dir>
+$ make && make install
 ```
 
 ### Setting IO Configurations
@@ -39,7 +36,7 @@ cb_config_list = ...
 
 ### Using IOFlex shared library
 - Using LD_PRELOAD without changing source code:
-```
+```bash
 export LD_PRELOAD=<path-to-libioflex>/libioflex.so
 mpirun ...
 ```
@@ -57,6 +54,8 @@ mpirun ...
 - Running with OpenMPI:
     -   Use ROMIO MCA component ```mpirun -np $NP --mca io romio321 <exe>```
     
-
+### TODO
+- Enable static linking
+- Support setting HDF5 and NetCDF alignment and chunking parameters
 
 

@@ -65,25 +65,25 @@ void set_mpi_info_config(MPI_Info info)
     memset(zerobuf, 0, MPI_MAX_INFO_VAL);
 
     if (memcmp(mpi_configs.romio_ds_read, zerobuf, MPI_MAX_INFO_VAL))
-        MPI_Info_set(info, "romio_ds_read", mpi_configs.romio_ds_read);
+        PMPI_Info_set(info, "romio_ds_read", mpi_configs.romio_ds_read);
     if (memcmp(mpi_configs.romio_ds_write, zerobuf, MPI_MAX_INFO_VAL))
-        MPI_Info_set(info, "romio_ds_write", mpi_configs.romio_ds_write);
+        PMPI_Info_set(info, "romio_ds_write", mpi_configs.romio_ds_write);
     if (memcmp(mpi_configs.romio_cb_read, zerobuf, MPI_MAX_INFO_VAL))
-        MPI_Info_set(info, "romio_cb_read", mpi_configs.romio_cb_read);
+        PMPI_Info_set(info, "romio_cb_read", mpi_configs.romio_cb_read);
     if (memcmp(mpi_configs.romio_cb_write, zerobuf, MPI_MAX_INFO_VAL))
-        MPI_Info_set(info, "romio_cb_write", mpi_configs.romio_cb_write);
+        PMPI_Info_set(info, "romio_cb_write", mpi_configs.romio_cb_write);
     if (memcmp(mpi_configs.romio_filesystem_type, zerobuf, MPI_MAX_INFO_VAL))
-        MPI_Info_set(info, "romio_filesystem_type", mpi_configs.romio_filesystem_type);
+        PMPI_Info_set(info, "romio_filesystem_type", mpi_configs.romio_filesystem_type);
     if (memcmp(mpi_configs.cb_config_list, zerobuf, MPI_MAX_INFO_VAL))
-        MPI_Info_set(info, "cb_config_list", mpi_configs.cb_config_list);
+        PMPI_Info_set(info, "cb_config_list", mpi_configs.cb_config_list);
     if (memcmp(mpi_configs.striping_unit, zerobuf, MPI_MAX_INFO_VAL))
-        MPI_Info_set(info, "striping_unit", mpi_configs.striping_unit);
+        PMPI_Info_set(info, "striping_unit", mpi_configs.striping_unit);
     if (memcmp(mpi_configs.striping_factor, zerobuf, MPI_MAX_INFO_VAL))
-        MPI_Info_set(info, "striping_factor", mpi_configs.striping_factor);
+        PMPI_Info_set(info, "striping_factor", mpi_configs.striping_factor);
     if (memcmp(mpi_configs.cb_nodes, zerobuf, MPI_MAX_INFO_VAL))
-        MPI_Info_set(info, "cb_nodes", mpi_configs.cb_nodes);
+        PMPI_Info_set(info, "cb_nodes", mpi_configs.cb_nodes);
     if (memcmp(mpi_configs.cb_buffer_size, zerobuf, MPI_MAX_INFO_VAL))
-        MPI_Info_set(info, "cb_buffer_size", mpi_configs.cb_buffer_size);
+        PMPI_Info_set(info, "cb_buffer_size", mpi_configs.cb_buffer_size);
 }
 
 // TODO HDF5 Parameters

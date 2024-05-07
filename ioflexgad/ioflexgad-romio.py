@@ -266,20 +266,24 @@ def ioflexgad():
     num_generations = args["num_gens"]
     pop_size = args["pop_size"]
     elite_size = args["elite_size"]
-
+    num_parents_mating = args["num_parents"]
+    crossover_type = args["cross_type"]
+    parent_selection_type = args["select_type"]
+    crossover_probability = args["cross_prob"]
+    mutation_probability = args["mut_prob"]
     sol_per_pop = len(gene_space)
     ga_instance = pygad.GA(num_generations=num_generations,
-                        num_parents_mating=args["num_parents"],
+                        num_parents_mating=num_parents_mating,
                         sol_per_pop=sol_per_pop,
                         num_genes=no_of_configs,
                         gene_space=gene_space,
                         gene_type=int,
                         fitness_func=eval_func,
-                        parent_selection_type=args["select_type"],
+                        parent_selection_type=parent_selection_type,
                         keep_elitism=elite_size,
-                        crossover_type=args["cross_type"],
-                        crossover_probability=args["cross_prob"],
-                        mutation_probability=args["mut_prob"],
+                        crossover_type=crossover_type,
+                        crossover_probability=crossover_probability,
+                        mutation_probability=mutation_probability,
                         suppress_warnings=True,
                         random_seed=123,
                         save_solutions=True,

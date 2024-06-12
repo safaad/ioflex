@@ -124,7 +124,7 @@ def eval_func(ga_instance, solution, solution_idx):
     if not ioflexset:
         os.environ['ROMIO_HINTS'] = romio_path
     
-    print("Running with configs: " + configs_str)
+    # print("Running with configs: " + configs_str)
 
     config_exist = None
     # check if config already exists
@@ -207,7 +207,7 @@ def ioflexgad():
     outfile = open(args["outfile"], 'w')
 
 
-    print("Starting IOptimize")
+    print("Starting IOFlex Genetic Algorithm")
 
     global num_generations, pop_size, elite_size, iter_count
 

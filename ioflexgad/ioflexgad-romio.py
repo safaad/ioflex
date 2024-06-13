@@ -132,7 +132,7 @@ def eval_func(ga_instance, solution, solution_idx):
         config_exist = [line for line in infile if configs_str in line]
     
     if config_exist is not None and len(config_exist)!= 0:
-        elapsedtime = float(config_exist.split(',elapsedtime,')[1])
+        elapsedtime = float(config_exist[0].split(',elapsedtime,')[1])
         outline = configs_str + "elapsedtime," + str(elapsedtime)+"\n"
         outfile.write(outline)
         print("Config found:" + outline)

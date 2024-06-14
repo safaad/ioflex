@@ -214,7 +214,7 @@ def runall():
         elapsedtime = 0.0
 
         starttime = time.time()
-        q = subprocess.Popen(run_app, stdout=subprocess.PIPE, shell=True)
+        q = subprocess.Popen(run_app, stdout=subprocess.DEVNULL, shell=True)
         out, err = q.communicate()
         elapsedtime = time.time() - starttime
         # Write output of this config

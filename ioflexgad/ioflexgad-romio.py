@@ -9,7 +9,7 @@ import signal
 from shutil import move, rmtree
 import re
 import argparse
-
+import shlex
 import pygad
 import numpy
 
@@ -142,8 +142,9 @@ def eval_func(ga_instance, solution, solution_idx):
     starttime = 0.0
     elapsedtime = 0.0
 
+    env = os.environ.copy()
     starttime = time.time()
-    q = subprocess.Popen(run_app, stdout=subprocess.DEVNULL, shell=True)
+    q = subprocess.Popen(shlex.split(run_app), stdout=subprocess.DEVNULL, shell=False, cwd=os.getcwd())
     out, err = q.communicate()
     elapsedtime = time.time() - starttime
     # Write output of this config
@@ -152,7 +153,7 @@ def eval_func(ga_instance, solution, solution_idx):
     
     # Clean application files after every iteration
     for f in files_to_clean:
-        if os.path.isfile(f):
+        if os.path.isfile(f) or os.path.isdir(f):
             os.remove(f)
         if os.path.isdir(f):
             rmtree(f)

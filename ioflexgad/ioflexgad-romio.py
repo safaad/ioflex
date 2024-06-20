@@ -136,7 +136,8 @@ def eval_func(ga_instance, solution, solution_idx):
         outline = configs_str + "elapsedtime," + str(elapsedtime)+"\n"
         outfile.write(outline)
         print("Config found:" + outline)
-        return elapsedtime
+        fitness = -1.0 * (elapsedtime)
+        return fitness
 
     # start application
     starttime = 0.0
@@ -158,15 +159,15 @@ def eval_func(ga_instance, solution, solution_idx):
         if os.path.isdir(f):
             rmtree(f)
     print("Running config: " + outline)
-    fitness = 1.0 / (elapsedtime)
+    fitness = -1.0 * (elapsedtime)
     return fitness
 
 last_fitness = 0
 def on_generation(ga_instance):
     global last_fitness
     print(f"Generation = {ga_instance.generations_completed}")
-    print(f"Fitness    = {ga_instance.best_solution(pop_fitness=ga_instance.last_generation_fitness)[1]}")
-    print(f"Change     = {ga_instance.best_solution(pop_fitness=ga_instance.last_generation_fitness)[1] - last_fitness}")
+    print(f"Fitness    = {-1*ga_instance.best_solution(pop_fitness=ga_instance.last_generation_fitness)[1]}")
+    print(f"Change     = {-1*ga_instance.best_solution(pop_fitness=ga_instance.last_generation_fitness)[1] - -1*last_fitness}")
     last_fitness = ga_instance.best_solution(pop_fitness=ga_instance.last_generation_fitness)[1]
 
 

@@ -15,7 +15,7 @@
 #include <mpi.h>
 
 #define FORWARD_DECL(name, ret, args) \
-    ret (*__real_ ## name)args = NULL;
+    ret (*__act_ ## name)args = NULL;
 
 #define DECL(__name) __name
 
@@ -23,10 +23,10 @@
     __ret __func __args __attribute__ ((alias (#__fcall)));
 
 #define MAP_OR_FAIL(func) \
-    if(!(__real_ ## func)) \
+    if(!(__act_ ## func)) \
     { \
-        __real_ ## func = dlsym(RTLD_NEXT, #func); \
-        if(!(__real_ ## func)) { \
+        __act_ ## func = dlsym(RTLD_NEXT, #func); \
+        if(!(__act_ ## func)) { \
             fprintf(stderr, "IOFlex failed to map symbol: %s\n", #func); \
             exit(1); \
         } \

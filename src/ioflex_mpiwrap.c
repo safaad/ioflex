@@ -19,7 +19,7 @@ int DECL(MPI_File_open)(MPI_Comm comm, const char *filename, int amode, MPI_Info
         PMPI_Info_create(&info);
     // set info hints
     set_mpi_info_config(info);
-    ret = __real_PMPI_File_open(comm, filename, amode, info, fh);
+    ret = __act_PMPI_File_open(comm, filename, amode, info, fh);
     return ret;
 }
 
@@ -34,7 +34,7 @@ int DECL(MPI_File_set_view)(MPI_File fh, MPI_Offset disp, MPI_Datatype etype, MP
     if (info == MPI_INFO_NULL)
         PMPI_Info_create(&info);
     set_mpi_info_config(info);
-    ret = __real_PMPI_File_set_view(fh, disp, etype, filetype, datarep, info);
+    ret = __act_PMPI_File_set_view(fh, disp, etype, filetype, datarep, info);
     return ret;
 }
 
@@ -48,7 +48,7 @@ int DECL(MPI_File_set_info)(MPI_File fh, MPI_Info info) {
     if (info == MPI_INFO_NULL)
         PMPI_Info_create(&info);
     set_mpi_info_config(info);
-    ret = __real_PMPI_File_set_info(fh, info);
+    ret = __act_PMPI_File_set_info(fh, info);
 
     return ret;
 

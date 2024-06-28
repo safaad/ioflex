@@ -46,16 +46,16 @@ mpirun ...
 
 ```
 ### Important Notes
-- Make sure that Darshan IO profiler is not loaded at the same time with IOFlex
+- You can use Darshan I/O profiler with IOFlex. Just make sure to load IOFlex before Darshan
 - Compile and install IOFlex with the same environment (compiler and MPI) the program use
 - Running with MPT:
     - Set the following flag ```export MPI_SHEPHERD=true```
     - For MPT + OpenMP: LD_PRELOAD hangs so recompile with shared library flags
 - Running with OpenMPI:
     -   Use ROMIO MCA component ```mpirun -np $NP --mca io romio321 <exe>```
-    
-### TODO
-- Enable static linking
-- Support setting HDF5 and NetCDF alignment and chunking parameters
+   
+
+# IOFlex GA
+
 
 

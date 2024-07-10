@@ -12,7 +12,7 @@ import argparse
 import shlex
 import pygad
 import numpy
-
+from datetime import datetime
 
 # Set of IO Configurations
 ## Lustre Striping
@@ -145,13 +145,20 @@ def eval_func(ga_instance, solution, solution_idx):
 
     env = os.environ.copy()
     starttime = time.time()
-    q = subprocess.Popen(shlex.split(run_app), stdout=subprocess.DEVNULL, shell=False, cwd=os.getcwd())
+    q = subprocess.Popen(shlex.split(run_app), stdout=subprocess.PIPE, shell=False, cwd=os.getcwd())
     out, err = q.communicate()
+
     elapsedtime = time.time() - starttime
     # Write output of this config
     outline = configs_str + "elapsedtime," + str(elapsedtime)+"\n"
     outfile.write(outline)
     
+    if logisset:
+        logfile_o.write("Config: " + configs_str + "\n")
+        logfile_o.write(str(out) + "\n")
+        logfile_e.write("Config: " + configs_str + "\n")
+        logfile_e.write(str(err)+ "\n")
+
     # Clean application files after every iteration
     for f in files_to_clean:
         if os.path.isfile(f) or os.path.isdir(f):
@@ -188,7 +195,8 @@ def ioflexgad():
     ap.add_argument("--num_parents", type=int, help="Number of parents mating", default=5)
     ap.add_argument("--pop_size", type=int, help="Population size", default=10)
     ap.add_argument("--cross_type", type=str, help="crossover type", default="scattered")
-    ap.add_argument("--elite-size", type=int, help="Elite size", default=4)
+    ap.add_argument("--elite_size", type=int, help="Elite size", default=4)
+    ap.add_argument("--with_log_path", type=str, help="If set the output of the program will be saved in this path (Default:None)", default=None)
     parse = ap.parse_args()
     args = vars(parse)
     global ioflexset
@@ -263,6 +271,20 @@ def ioflexgad():
         cbl_id = no_of_configs
         no_of_configs += 1
     
+    global applogpath, logisset, logfile_o, logfile_e
+
+    applogpath = args["with_log_path"]
+    if applogpath is None:
+        logisset = False
+    elif os.path.exists(applogpath):
+        logisset = True
+        time = datetime.now()
+        logfile_o = open(os.path.join(applogpath, ("out." + time.strftime("%Y%m%d_%H.%M.%S"))), 'w')
+                         
+        logfile_e = open(os.path.join(applogpath, ("err." + time.strftime("%Y%m%d_%H.%M.%S"))), 'w')
+    else:
+        logisset = False
+        print("The output of the app will not be logged")
 
     global num_generations, pop_size, elite_size
     num_generations = args["num_gens"]
@@ -303,7 +325,10 @@ def ioflexgad():
     outfile.close()
     if infile is not None:
         infile.close()
-        
+    
+    if logisset:
+        logfile_o.close()
+        logfile_e.close()
     # print(f"Solution : {ga_instance.solutions}")
     solution, solution_fitness, solution_idx = ga_instance.best_solution()
     print(f"Parameters of the best solution : {solution}")

@@ -1,5 +1,5 @@
 #pip install hyperopt
-from hyperopt import fmin, tpe, Trials, rand, hp
+from hyperopt import fmin, tpe, Trials, rand, hp, gp, atpe, anneal, rand
 import subprocess
 import shutil
 import os

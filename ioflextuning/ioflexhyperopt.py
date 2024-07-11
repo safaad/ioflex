@@ -1,5 +1,5 @@
-#pip install hyperopt
-from hyperopt import fmin, tpe, Trials, rand, hp, gp, atpe, anneal, rand
+#pip install hyperopt, pyll for gp
+from hyperopt import fmin, tpe, Trials, rand, hp, atpe, anneal, rand
 import subprocess
 import shutil
 import os
@@ -27,7 +27,7 @@ cb_nodes = [1, 2, 4, 8, 16, 24, 32, 48, 64, 128]
 cb_config_list = []
 
 ## ROMIO Optimizations
-romio_fs_type = ["\"LUSTRE:\"", "\"UFS:\""]
+romio_fs_type = ["\"lustre:\"", "\"ufs:\""]
 romio_ds_read = ["automatic", "enable", "disable"]
 romio_ds_write = ["automatic", "enable", "disable"]
 romio_cb_read = ["automatic", "enable", "disable"]
@@ -74,6 +74,7 @@ def eval_func(params):
         configs_str += "cb_nodes," + str(cbn_val) + ","
     if fstype_id is not None:
         fstype_val = params['romio_fs_type']
+        os.environ['ROMIO_FSTYPE_FORCE']=fstype_val
         if ioflexset:
             config_file.write("romio_filesystem_type = " + fstype_val+"\n")
         else:

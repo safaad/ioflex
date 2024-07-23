@@ -25,7 +25,7 @@ cb_nodes = [1, 2, 4, 8, 16, 24, 32, 48, 64, 128]
 cb_config_list = []
 
 ## ROMIO Optimizations
-romio_fs_type = ["\"lustre:\"", "\"ufs:\""]
+romio_fs_type = ["\"LUSTRE:\"", "\"UFS:\""]
 romio_ds_read = ["automatic", "enable", "disable"]
 romio_ds_write = ["automatic", "enable", "disable"]
 romio_cb_read = ["automatic", "enable", "disable"]
@@ -79,7 +79,7 @@ def eval_func(ga_instance, solution, solution_idx):
         configs_str += "cb_nodes," + str(cbn_val) + ","
     if fstype_id is not None:
         fstype_val = romio_fs_type[solution[fstype_id]]
-        os.environ['ROMIO_FSTYPE_FORCE']=fstype_val
+        # os.environ['ROMIO_FSTYPE_FORCE']=fstype_val
         if ioflexset:
             config_file.write("romio_filesystem_type = " + fstype_val+"\n")
         else:
@@ -147,18 +147,20 @@ def eval_func(ga_instance, solution, solution_idx):
     env = os.environ.copy()
     starttime = time.time()
     q = subprocess.Popen(shlex.split(run_app), stdout=subprocess.PIPE, shell=False, cwd=os.getcwd())
-    out, err = q.communicate()
 
     elapsedtime = time.time() - starttime
+    out, err = q.communicate()
     # Write output of this config
     outline = configs_str + "elapsedtime," + str(elapsedtime)+"\n"
     outfile.write(outline)
     
     if logisset:
         logfile_o.write("Config: " + configs_str + "\n")
-        logfile_o.write(str(out) + "\n")
+        out = str(out).replace(r'\n','\n')
+        logfile_o.write(f'\n{out}')
         logfile_e.write("Config: " + configs_str + "\n")
-        logfile_e.write(str(err)+ "\n")
+        err = str(err).replace(r'\n','\n')
+        logfile_e.write(f'\n{err}')
 
     # Clean application files after every iteration
     for f in files_to_clean:

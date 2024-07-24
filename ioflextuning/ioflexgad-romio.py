@@ -147,9 +147,9 @@ def eval_func(ga_instance, solution, solution_idx):
     env = os.environ.copy()
     starttime = time.time()
     q = subprocess.Popen(shlex.split(run_app), stdout=subprocess.PIPE, shell=False, cwd=os.getcwd())
-
-    elapsedtime = time.time() - starttime
     out, err = q.communicate()
+    
+    elapsedtime = time.time() - starttime
     # Write output of this config
     outline = configs_str + "elapsedtime," + str(elapsedtime)+"\n"
     outfile.write(outline)

@@ -139,9 +139,9 @@ def eval_func(params):
     env = os.environ.copy()
     starttime = time.time()
     q = subprocess.Popen(shlex.split(run_app), stdout=subprocess.PIPE, shell=False, cwd=os.getcwd())
+    out, err = q.communicate()
 
     elapsedtime = time.time() - starttime
-    out, err = q.communicate()
     # Write output of this config
     outline = configs_str + "elapsedtime," + str(elapsedtime)+"\n"
     outfile.write(outline)

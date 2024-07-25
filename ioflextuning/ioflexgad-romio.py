@@ -64,12 +64,15 @@ def eval_func(ga_instance, solution, solution_idx):
             config_file.write("striping_factor " + str(strf_val)+"\n")
         configs_str += "striping_factor," + str(strf_val) + ","
     if stru_id is not None:
+        # Set cb_buffer_size same as striping unit
         stru_val = solution[stru_id]
         if ioflexset:
             config_file.write("striping_unit = " + str(stru_val)+"\n")
+            config_file.write("cb_buffer_size = " + str(stru_val)+"\n")
         else:
             config_file.write("striping_unit " + str(stru_val)+"\n")
-        configs_str += "striping_unit," + str(stru_val) + ","
+            config_file.write("cb_buffer_size " + str(stru_val)+"\n")
+        configs_str += "striping_unit," + str(stru_val) + ",cb_buffer_size," + str(stru_val) + ","  
     if cbn_id is not None:
         cbn_val = solution[cbn_id]
         if ioflexset:

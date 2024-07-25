@@ -62,9 +62,11 @@ def eval_func(params):
         stru_val = params['striping_unit']
         if ioflexset:
             config_file.write("striping_unit = " + str(stru_val)+"\n")
+            config_file.write("cb_buffer_size = " + str(stru_val)+"\n")
         else:
             config_file.write("striping_unit " + str(stru_val)+"\n")
-        configs_str += "striping_unit," + str(stru_val) + ","
+            config_file.write("cb_buffer_size " + str(stru_val)+"\n")
+        configs_str += "striping_unit," + str(stru_val) + ",cb_buffer_size," + str(stru_val) + ","  
     if cbn_id is not None:
         cbn_val = params['cb_nodes']
         if ioflexset:

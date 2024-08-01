@@ -27,7 +27,7 @@ cb_nodes = [1, 2, 4, 8, 16, 24, 32, 48, 64, 128]
 cb_config_list = []
 
 ## ROMIO Optimizations
-romio_fs_type = ["\"LUSTRE:\"", "\"UFS:\""]
+romio_fs_type = ["LUSTRE:", "UFS:"]
 romio_ds_read = ["automatic", "enable", "disable"]
 romio_ds_write = ["automatic", "enable", "disable"]
 romio_cb_read = ["automatic", "enable", "disable"]
@@ -76,7 +76,7 @@ def eval_func(params):
         configs_str += "cb_nodes," + str(cbn_val) + ","
     if fstype_id is not None:
         fstype_val = params['romio_fs_type']
-        # os.environ['ROMIO_FSTYPE_FORCE']=fstype_val
+        os.environ["ROMIO_FSTYPE_FORCE"]=fstype_val
         if ioflexset:
             config_file.write("romio_filesystem_type = " + fstype_val+"\n")
         else:
@@ -290,14 +290,12 @@ def ioflexhyperopt():
             algo = tpe.suggest
 
     # Perform Optimization
+ 
     trials = Trials()
     best = fmin(fn=eval_func, space=configs_space, algo=algo, max_evals=max_evals, trials=trials)
 
     print("Best parameters: ", best)
-    print("Saving Results")
-
-    # if args["outgainstance"] is not None:
-    #     ga_instance.save(filename=args["outgainstance"])
+#    print("Saving Results")
 
 
     outfile.close()

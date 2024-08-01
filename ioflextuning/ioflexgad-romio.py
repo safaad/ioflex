@@ -25,7 +25,7 @@ cb_nodes = [1, 2, 4, 8, 16, 24, 32, 48, 64, 128]
 cb_config_list = []
 
 ## ROMIO Optimizations
-romio_fs_type = ["\"LUSTRE:\"", "\"UFS:\""]
+romio_fs_type = ["LUSTRE:", "UFS:"]
 romio_ds_read = ["automatic", "enable", "disable"]
 romio_ds_write = ["automatic", "enable", "disable"]
 romio_cb_read = ["automatic", "enable", "disable"]
@@ -82,7 +82,7 @@ def eval_func(ga_instance, solution, solution_idx):
         configs_str += "cb_nodes," + str(cbn_val) + ","
     if fstype_id is not None:
         fstype_val = romio_fs_type[solution[fstype_id]]
-        # os.environ['ROMIO_FSTYPE_FORCE']=fstype_val
+        os.environ["ROMIO_FSTYPE_FORCE"]=fstype_val
         if ioflexset:
             config_file.write("romio_filesystem_type = " + fstype_val+"\n")
         else:

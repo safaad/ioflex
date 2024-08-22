@@ -1,5 +1,5 @@
 # IOFlex 
-IOFlex is a portable I/O wrapper tool that transperantly sets I/O configurations for HPC applications. IOFlex can be used to optimize IO for HPC applications without changing the source code. It overrides hints set using environment variables and MPI_Info_set().
+IOFlex is a portable I/O tool that transperantly sets I/O configurations for HPC applications. IOFlex can be used to optimize IO for HPC applications without changing the source code. It overrides hints set using environment variables and MPI_Info_set().
 
 ## Instructions
 ### Prerequisites

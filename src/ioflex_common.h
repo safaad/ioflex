@@ -1,8 +1,8 @@
 #ifndef __IOFLEX_COMMON
 #define __IOFLEX_COMMON
 
-
 #include <stdio.h>
+#include <stdbool.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -15,23 +15,24 @@
 #include <mpi.h>
 
 #define FORWARD_DECL(name, ret, args) \
-    ret (*__act_ ## name)args = NULL;
+    ret(*__act_##name) args = NULL;
 
 #define DECL(__name) __name
 
-#define IOFLEX_WRAPPER_MAP(__func,__ret,__args,__fcall) \
-    __ret __func __args __attribute__ ((alias (#__fcall)));
+#define IOFLEX_WRAPPER_MAP(__func, __ret, __args, __fcall) \
+    __ret __func __args __attribute__((alias(#__fcall)));
 
-#define MAP_OR_FAIL(func) \
-    if(!(__act_ ## func)) \
-    { \
-        __act_ ## func = dlsym(RTLD_NEXT, #func); \
-        if(!(__act_ ## func)) { \
+#define MAP_OR_FAIL(func)                                                \
+    if (!(__act_##func))                                                 \
+    {                                                                    \
+        __act_##func = dlsym(RTLD_NEXT, #func);                          \
+        if (!(__act_##func))                                             \
+        {                                                                \
             fprintf(stderr, "IOFlex failed to map symbol: %s\n", #func); \
-            exit(1); \
-        } \
+            exit(1);                                                     \
+        }                                                                \
     }
-    
+
 typedef struct mpi_configs
 {
     char romio_ds_read[MPI_MAX_INFO_VAL];

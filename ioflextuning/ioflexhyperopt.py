@@ -1,5 +1,5 @@
 #pip install hyperopt, pyll for gp
-from hyperopt import fmin, tpe, Trials, rand, hp, atpe, anneal, rand
+from hyperopt import fmin, tpe, Trials, rand, hp, anneal, rand
 import subprocess
 import shutil
 import os
@@ -167,7 +167,7 @@ def ioflexhyperopt():
     ap.add_argument('--cmd', '-c', type=str, required=True, action="store", nargs="*", help="Application command line")
     # Hyperopt Options
     ap.add_argument("--max_evals", type=int, help="Max number of evaluations",default=50)
-    ap.add_argument("--algorithm", type=str, help="Algorithm used by Hyperopt possible options: tpe (Tree-structured Parzen Estimator), apte (Adaptive TPE), rand (Random Search), anneal (Simulated Annealing), gp (BO using Gaussian Processes)", default="tpe")
+    ap.add_argument("--algorithm", type=str, choices=['tpe','rand','anneal', 'gp'], help="Algorithm used by Hyperopt possible options: tpe (Tree-structured Parzen Estimator), rand (Random Search), anneal (Simulated Annealing), gp (BO using Gaussian Processes)", default="tpe")
     ap.add_argument("--with_log_path", type=str, help="If set the output of the program will be saved in this path (Default:None)", default=None)
     parse = ap.parse_args()
     args = vars(parse)
@@ -255,9 +255,6 @@ def ioflexhyperopt():
     algo=tpe.suggest
     
     match args["algorithm"]:
-        case "atpe":
-            print("Running with ATPE")
-            algo = atpe.suggest
         case "anneal":
             print("Running with Simulated Annealing ")
             algo = anneal.suggest

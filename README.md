@@ -1,7 +1,11 @@
 # IOFlex 
-IOFlex is a portable I/O tool that transperantly sets I/O configurations for HPC applications. IOFlex can be used to optimize IO for HPC applications without changing the source code. It overrides hints set using environment variables and MPI_Info_set().
+IOFlex is a portable I/O tuning tool designed to optimize I/O performance for HPC (High-Performance Computing) applications without requiring source code modifications. 
 
-## Instructions
+IOFlex Consists of two main component (i) IOFlex I/O wrapper library and (ii) IOFlex I/O auto-tuning library.
+
+
+## I. IOFlex I/O Wrapper
+IOFlex adjusts I/O configurations like Lustre striping and ROMIO hints. It integrates seamlessly, either through LD_PRELOAD or by linking the shared library during compilation. IOFlex Works with various MPI environments like OpenMPI and MPT, with support for profiling tools like Darshan. I/O configurations set using IOFlex override any previously I/O configuration.
 ### Prerequisites
 
 - libconfuse: https://github.com/libconfuse/libconfuse.git
@@ -47,6 +51,7 @@ mpirun ...
 ```
 ### Important Notes
 - You can use Darshan I/O profiler with IOFlex. Just make sure to load IOFlex before Darshan
+- IOFlex supports HDF5 and NetCDF I/O libraries.
 - Compile and install IOFlex with the same environment (compiler and MPI) the program use
 - Running with MPT:
     - Set the following flag ```export MPI_SHEPHERD=true```
@@ -55,7 +60,6 @@ mpirun ...
     -   Use ROMIO MCA component ```mpirun -np $NP --mca io romio321 <exe>```
    
 
-# IOFlex GA
+# II. IOFlex I/O Auto-tuning tool
 
-
-
+Automated I/O tuning to identify optimal configurations for different workloads.

@@ -75,12 +75,13 @@ def eval_func(trial):
     # Set IO Configurations
     configs_str = ""
     if len(striping_factor):
+
         strf_val = trial.suggest_categorical("striping_factor", striping_factor)
         if ioflexset:
             config_file.write("striping_factor = " + str(strf_val) + "\n")
         else:
             config_file.write("striping_factor " + str(strf_val) + "\n")
-        configs_str += "striping_factor," + str(strf_val) + ","
+        configs_str += str(strf_val) + ","
     if len(striping_unit):
         stru_val = trial.suggest_categorical("striping_unit", striping_unit)
         if ioflexset:
@@ -89,16 +90,14 @@ def eval_func(trial):
         else:
             config_file.write("striping_unit " + str(stru_val) + "\n")
             config_file.write("cb_buffer_size " + str(stru_val) + "\n")
-        configs_str += (
-            "striping_unit," + str(stru_val) + ",cb_buffer_size," + str(stru_val) + ","
-        )
+        configs_str += str(stru_val) + "," + str(stru_val) + ","
     if len(cb_nodes):
         cbn_val = trial.suggest_categorical("cb_nodes", cb_nodes)
         if ioflexset:
             config_file.write("cb_nodes = " + str(cbn_val) + "\n")
         else:
             config_file.write("cb_nodes " + str(cbn_val) + "\n")
-        configs_str += "cb_nodes," + str(cbn_val) + ","
+        configs_str += str(cbn_val) + ","
     if len(romio_fs_type):
         fstype_val = trial.suggest_categorical("romio_fs_type", romio_fs_type)
         os.environ["ROMIO_FSTYPE_FORCE"] = fstype_val
@@ -106,42 +105,42 @@ def eval_func(trial):
             config_file.write("romio_filesystem_type = " + fstype_val + "\n")
         else:
             config_file.write("romio_filesystem_type " + fstype_val + "\n")
-        configs_str += "romio_filesystem_type," + fstype_val + ","
+        configs_str += fstype_val + ","
     if len(romio_ds_read):
         dsread_val = trial.suggest_categorical("romio_ds_read", romio_ds_read)
         if ioflexset:
             config_file.write("romio_ds_read = " + dsread_val + "\n")
         else:
             config_file.write("romio_ds_read " + dsread_val + "\n")
-        configs_str += "romio_ds_read," + dsread_val + ","
+        configs_str += dsread_val + ","
     if len(romio_ds_write):
         dswrite_val = trial.suggest_categorical("romio_ds_write", romio_ds_write)
         if ioflexset:
             config_file.write("romio_ds_write = " + dswrite_val + "\n")
         else:
             config_file.write("romio_ds_write " + dswrite_val + "\n")
-        configs_str += "romio_ds_write," + dswrite_val + ","
+        configs_str += dswrite_val + ","
     if len(romio_cb_read):
         cbread_val = trial.suggest_categorical("romio_cb_read", romio_cb_read)
         if ioflexset:
             config_file.write("romio_cb_read = " + cbread_val + "\n")
         else:
             config_file.write("romio_cb_read " + cbread_val + "\n")
-        configs_str += "romio_cb_read," + cbread_val + ","
+        configs_str += cbread_val + ","
     if len(romio_cb_write):
         cbwrite_val = trial.suggest_categorical("romio_cb_write", romio_cb_write)
         if ioflexset:
             config_file.write("romio_cb_write = " + cbwrite_val + "\n")
         else:
             config_file.write("romio_cb_write " + cbwrite_val + "\n")
-        configs_str += "romio_cb_write," + cbwrite_val + ","
+        configs_str += cbwrite_val + ","
     if len(cb_config_list):
         cbl_val = trial.suggest_categorical("cb_config_list", cb_config_list)
         if ioflexset:
             config_file.write("cb_config_list = " + cbl_val + "\n")
         else:
             config_file.write("cb_config_list " + cbl_val + "\n")
-        configs_str += "cb_config_list," + cbl_val + ","
+        configs_str += cbl_val + ","
     config_file.close()
     # Use ROMIO HINTS if IOFLex is not enabled
     if not ioflexset:
@@ -160,7 +159,8 @@ def eval_func(trial):
 
     elapsedtime = time.time() - starttime
     # Write output of this config
-    outline = configs_str + "elapsedtime," + str(elapsedtime) + "\n"
+
+    outline = configs_str + str(elapsedtime) + "\n"
     outfile.write(outline)
 
     if logisset:
@@ -278,26 +278,38 @@ def ioflexoptuna():
     max_trials = args["max_trials"]
 
     # Define search space for grid  sampler
+    header_str = ""
     config_space = {}
-
     if len(striping_factor):
         config_space["striping_factor"] = striping_factor
+        header_str += "striping_factor,"
     if len(striping_unit):
         config_space["striping_unit"] = striping_unit
+        header_str += "striping_unit,cb_buffer_size,"
     if len(cb_nodes):
         config_space["cb_nodes"] = cb_nodes
+        header_str += "cb_nodes,"
     if len(romio_fs_type):
         config_space["romio_fs_type"] = romio_fs_type
+        header_str += "romio_filesystem_type,"
     if len(romio_ds_read):
         config_space["romio_ds_read"] = romio_ds_read
+        header_str += "romio_ds_read,"
     if len(romio_ds_write):
         config_space["romio_ds_write"] = romio_ds_write
+        header_str += "romio_ds_write,"
     if len(romio_cb_read):
         config_space["romio_cb_read"] = romio_cb_read
+        header_str += "romio_cb_read,"
     if len(romio_cb_write):
         config_space["romio_cb_write"] = romio_cb_write
+        header_str += "romio_cb_write,"
     if len(cb_config_list):
         config_space["cb_config_list"] = cb_config_list
+        header_str += "cb_config_list,"
+
+    header_str += "elapsedtime\n"
+    outfile.write(header_str)
 
     print(config_space)
     sampler = optuna.samplers.TPESampler()

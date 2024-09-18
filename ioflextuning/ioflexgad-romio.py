@@ -70,7 +70,7 @@ def eval_func(ga_instance, solution, solution_idx):
             config_file.write("striping_factor = " + str(strf_val) + "\n")
         else:
             config_file.write("striping_factor " + str(strf_val) + "\n")
-        configs_str += "striping_factor," + str(strf_val) + ","
+        configs_str += str(strf_val) + ","
     if stru_id is not None:
         # Set cb_buffer_size same as striping unit
         stru_val = solution[stru_id]
@@ -80,16 +80,14 @@ def eval_func(ga_instance, solution, solution_idx):
         else:
             config_file.write("striping_unit " + str(stru_val) + "\n")
             config_file.write("cb_buffer_size " + str(stru_val) + "\n")
-        configs_str += (
-            "striping_unit," + str(stru_val) + ",cb_buffer_size," + str(stru_val) + ","
-        )
+        configs_str += (str(stru_val) + "," + str(stru_val) + ",")
     if cbn_id is not None:
         cbn_val = solution[cbn_id]
         if ioflexset:
             config_file.write("cb_nodes = " + str(cbn_val) + "\n")
         else:
             config_file.write("cb_nodes " + str(cbn_val) + "\n")
-        configs_str += "cb_nodes," + str(cbn_val) + ","
+        configs_str += str(cbn_val) + ","
     if fstype_id is not None:
         fstype_val = romio_fs_type[solution[fstype_id]]
         os.environ["ROMIO_FSTYPE_FORCE"] = fstype_val
@@ -97,42 +95,42 @@ def eval_func(ga_instance, solution, solution_idx):
             config_file.write("romio_filesystem_type = " + fstype_val + "\n")
         else:
             config_file.write("romio_filesystem_type " + fstype_val + "\n")
-        configs_str += "romio_filesystem_type," + fstype_val + ","
+        configs_str += fstype_val + ","
     if dsread_id is not None:
         dsread_val = romio_ds_read[solution[dsread_id]]
         if ioflexset:
             config_file.write("romio_ds_read = " + dsread_val + "\n")
         else:
             config_file.write("romio_ds_read " + dsread_val + "\n")
-        configs_str += "romio_ds_read," + dsread_val + ","
+        configs_str += dsread_val + ","
     if dswrite_id is not None:
         dswrite_val = romio_ds_write[solution[dswrite_id]]
         if ioflexset:
             config_file.write("romio_ds_write = " + dswrite_val + "\n")
         else:
             config_file.write("romio_ds_write " + dswrite_val + "\n")
-        configs_str += "romio_ds_write," + dswrite_val + ","
+        configs_str += dswrite_val + ","
     if cbread_id is not None:
         cbread_val = romio_cb_read[solution[cbread_id]]
         if ioflexset:
             config_file.write("romio_cb_read = " + cbread_val + "\n")
         else:
             config_file.write("romio_cb_read " + cbread_val + "\n")
-        configs_str += "romio_cb_read," + cbread_val + ","
+        configs_str += cbread_val + ","
     if cbwrite_id is not None:
         cbwrite_val = romio_cb_write[solution[cbwrite_id]]
         if ioflexset:
             config_file.write("romio_cb_write = " + cbwrite_val + "\n")
         else:
             config_file.write("romio_cb_write " + cbwrite_val + "\n")
-        configs_str += "romio_cb_write," + cbwrite_val + ","
+        configs_str += cbwrite_val + ","
     if cbl_id is not None:
         cbl_val = cb_config_list[solution[cbl_id]]
         if ioflexset:
             config_file.write("cb_config_list = " + cbl_val + "\n")
         else:
             config_file.write("cb_config_list " + cbl_val + "\n")
-        configs_str += "cb_config_list," + cbl_val + ","
+        configs_str += cbl_val + ","
     config_file.close()
     # Use ROMIO HINTS if IOFLex is not enabled
     if not ioflexset:
@@ -147,7 +145,7 @@ def eval_func(ga_instance, solution, solution_idx):
 
     if config_exist is not None and len(config_exist) != 0:
         elapsedtime = float(config_exist[0].split(",elapsedtime,")[1])
-        outline = configs_str + "elapsedtime," + str(elapsedtime) + "\n"
+        outline = configs_str + str(elapsedtime) + "\n"
         outfile.write(outline)
         print("Config found:" + outline)
         fitness = -1.0 * (elapsedtime)
@@ -166,7 +164,7 @@ def eval_func(ga_instance, solution, solution_idx):
 
     elapsedtime = time.time() - starttime
     # Write output of this config
-    outline = configs_str + "elapsedtime," + str(elapsedtime) + "\n"
+    outline = configs_str  + str(elapsedtime) + "\n"
     outfile.write(outline)
 
     if logisset:
@@ -304,44 +302,55 @@ def ioflexgad():
     cbread_id = None
     cbwrite_id = None
     cbl_id = None
-
+    header_str = ""
     if len(striping_factor):
         gene_space.append(striping_factor)
         strf_id = no_of_configs
         no_of_configs += 1
+        header_str += "striping_factor,"
     if len(striping_unit):
         gene_space.append(striping_unit)
         stru_id = no_of_configs
         no_of_configs += 1
+        header_str += "striping_unit,cb_buffer_size,"
     if len(cb_nodes):
         gene_space.append(cb_nodes)
         cbn_id = no_of_configs
         no_of_configs += 1
+        header_str += "cb_nodes,"
     if len(romio_fs_type):
         gene_space.append([romio_fs_type.index(x) for x in romio_fs_type])
         fstype_id = no_of_configs
         no_of_configs += 1
+        header_str += "romio_filesystem_type,"
     if len(romio_ds_read):
         gene_space.append([romio_ds_read.index(x) for x in romio_ds_read])
         dsread_id = no_of_configs
         no_of_configs += 1
+        header_str += "romio_ds_read,"
     if len(romio_ds_write):
         gene_space.append([romio_ds_write.index(x) for x in romio_ds_write])
         dswrite_id = no_of_configs
         no_of_configs += 1
+        header_str += "romio_ds_write,"
     if len(romio_cb_read):
         gene_space.append([romio_cb_read.index(x) for x in romio_cb_read])
         cbread_id = no_of_configs
         no_of_configs += 1
+        header_str += "romio_cb_read,"
     if len(romio_cb_write):
         gene_space.append([romio_cb_write.index(x) for x in romio_cb_write])
         cbwrite_id = no_of_configs
         no_of_configs += 1
+        header_str += "romio_cb_write,"
     if len(cb_config_list):
         gene_space.append([cb_config_list.index(x) for x in cb_config_list])
         cbl_id = no_of_configs
         no_of_configs += 1
+        header_str += "cb_config_list,"
 
+    header_str += "elapsedtime\n"
+    outfile.write(header_str)
     global applogpath, logisset, logfile_o, logfile_e
 
     applogpath = args["with_log_path"]

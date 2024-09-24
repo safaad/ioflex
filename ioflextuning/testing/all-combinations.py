@@ -176,6 +176,7 @@ def runall():
                 config_file.write("romio_filesystem_type = " + fstype_val+"\n")
             else:
                 config_file.write("romio_filesystem_type " + fstype_val+"\n")
+            os.environ["ROMIO_FSTYPE_FORCE"] = fstype_val
             configs_str += "romio_filesystem_type," + fstype_val + ","
             iodict["romio_filesystem_type"] = fstype_val
         if dsread_id is not None:
@@ -225,24 +226,15 @@ def runall():
         if not ioflexset:
             os.environ['ROMIO_HINTS'] = romio_path
 
-        # config_exist = None
-        # # check if config already exists
-        # if infile is not None:
-        #     config_exist = [line for line in infile if configs_str in line]
-        
-        # if config_exist is not None and len(config_exist)!= 0:
-        #     elapsedtime = float(config_exist[0].split(',elapsedtime,')[1])
-        #     outline = configs_str + "elapsedtime," + str(elapsedtime)+"\n"
-        #     outfile.write(outline)
-        #     print("Config found:" + outline)
-        #     return elapsedtime
 
         # start application
         starttime = 0.0
         elapsedtime = 0.0
 
         starttime = time.time()
-        q = subprocess.Popen(run_app, stdout=subprocess.DEVNULL, shell=True)
+        q = subprocess.Popen(
+            shlex.split(run_app), stdout=subprocess.PIPE, shell=False, cwd=os.getcwd()
+        )
         out, err = q.communicate()
         elapsedtime = time.time() - starttime
         # Write output of this config

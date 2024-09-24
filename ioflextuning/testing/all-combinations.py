@@ -9,9 +9,11 @@ import signal
 from shutil import move, rmtree
 import re
 import argparse
-
+import pandas as pd
 import numpy
 import itertools
+import parsedarshan
+import glob
 
 # Set of IO Configurations
 ## Lustre Striping
@@ -25,7 +27,7 @@ cb_nodes = [1, 2, 4, 8, 16, 24, 32, 48, 64, 128]
 cb_config_list = []
 
 ## ROMIO Optimizations
-romio_fs_type = ["\"LUSTRE:\"", "\"UFS:\""]
+romio_fs_type = ["LUSTRE:", "UFS:"]
 romio_ds_read = ["automatic", "enable", "disable"]
 romio_ds_write = ["automatic", "enable", "disable"]
 romio_cb_read = ["automatic", "enable", "disable"]
@@ -35,11 +37,17 @@ romio_cb_write = ["automatic", "enable", "disable"]
 iter_count = 0
 files_to_clean = []
 
+df = pd.DataFrame()
+
 def runall():
     ap = argparse.ArgumentParser(add_help=True)
     ap.add_argument('--ioflex', action="store_true", default=False,help="IOFlex is enabled")
     ap.add_argument('--outfile', type=str, help="Path to output history runs file", default="./OutIOAllRuns.csv")
     ap.add_argument('--infile', type=str, help="Path to file from previous runs", default=None)
+    ap.add_argument('--app_name', type=str, help="Application Name", required=True)
+    ap.add_argument('--num_nodes', type=int, help="Num of nodes")
+    ap.add_argument('--mpi_procs', type=int, help="Number of mpi procs per node", required=True)
+    ap.add_argument('--darshan_path', type=str, help="Path to darshan output")
     ap.add_argument('--cmd', '-c', type=str, required=True, action="store", nargs="*", help="Application command line")
 
     parse = ap.parse_args()
@@ -61,6 +69,8 @@ def runall():
     global outfile
     outfile = open(args["outfile"], 'w')
 
+    iodict = {}
+    
     global strf_id, stru_id, cbn_id, fstype_id, dsread_id, dswrite_id, cbread_id, cbwrite_id, cbl_id
     no_of_configs = 0
     strf_id = None
@@ -73,6 +83,7 @@ def runall():
     cbwrite_id = None
     cbl_id = None
     all_configs = []
+
 
     if (len(striping_factor)):
         strf_id = no_of_configs
@@ -118,7 +129,15 @@ def runall():
     all_solutions = list(itertools.product(*all_configs))
     print("Number of all configs: " + str(len(all_solutions)) + '\n')
 
+    num_nodes = args["num_nodes"]
+    appname = args["app_name"]
+    mpiprocs = args["mpi_procs"]
+    
+    logfile = os.path.join(args["darshan_path"], "*.darshan")
+    df = pd.DataFrame()
     for solution in all_solutions:
+        iodict = {'appname': appname, 'num_nodes': num_nodes, 'mpi_procs': mpiprocs}
+        
         # Set IO Hints using IOFlex or ROMIO HINTS
         if ioflexset:
             config_file = open(os.path.join(dir_path,"config.conf"),'w')
@@ -134,6 +153,7 @@ def runall():
             else:
                 config_file.write("striping_factor " + str(strf_val)+"\n")
             configs_str += "striping_factor," + str(strf_val) + ","
+            iodict["striping_factor"] = strf_val
         if stru_id is not None:
             stru_val = solution[stru_id]
             if ioflexset:
@@ -141,6 +161,7 @@ def runall():
             else:
                 config_file.write("striping_unit " + str(stru_val)+"\n")
             configs_str += "striping_unit," + str(stru_val) + ","
+            iodict["striping_unit"] = stru_val
         if cbn_id is not None:
             cbn_val = solution[cbn_id]
             if ioflexset:
@@ -148,6 +169,7 @@ def runall():
             else:
                 config_file.write("cb_nodes " + str(cbn_val)+"\n")
             configs_str += "cb_nodes," + str(cbn_val) + ","
+            iodict["cb_nodes"] = cbn_val
         if fstype_id is not None:
             fstype_val = romio_fs_type[solution[fstype_id]]
             if ioflexset:
@@ -155,6 +177,7 @@ def runall():
             else:
                 config_file.write("romio_filesystem_type " + fstype_val+"\n")
             configs_str += "romio_filesystem_type," + fstype_val + ","
+            iodict["romio_filesystem_type"] = fstype_val
         if dsread_id is not None:
             dsread_val = romio_ds_read[solution[dsread_id]]
             if ioflexset:
@@ -162,6 +185,7 @@ def runall():
             else:
                 config_file.write("romio_ds_read " + dsread_val+"\n")
             configs_str += "romio_ds_read," + dsread_val + ","
+            iodict["romio_ds_read"] = dsread_val
         if dswrite_id is not None:
             dswrite_val = romio_ds_write[solution[dswrite_id]]
             if ioflexset:
@@ -169,6 +193,7 @@ def runall():
             else:
                 config_file.write("romio_ds_write " + dswrite_val+"\n")
             configs_str += "romio_ds_write," + dswrite_val + ","
+            iodict["romio_ds_write"] = dswrite_val
         if cbread_id is not None:
             cbread_val = romio_cb_read[solution[cbread_id]]
             if ioflexset:
@@ -176,6 +201,7 @@ def runall():
             else:
                 config_file.write("romio_cb_read " + cbread_val+"\n")
             configs_str += "romio_cb_read," + cbread_val + ","
+            iodict["romio_cb_read"] = cbread_val
         if cbwrite_id is not None:
             cbwrite_val = romio_cb_write[solution[cbwrite_id]]
             if ioflexset:
@@ -183,6 +209,7 @@ def runall():
             else:
                 config_file.write("romio_cb_write " + cbwrite_val +"\n")
             configs_str += "romio_cb_write," + cbwrite_val + ","
+            iodict["romio_cb_write"] = cbwrite_val
         if cbl_id is not None:
             cbl_val = cb_config_list[solution[cbl_id]]
             if ioflexset:
@@ -190,6 +217,7 @@ def runall():
             else:
                 config_file.write("cb_config_list " + cbl_val+"\n")
             configs_str += "cb_config_list," + cbl_val + ","
+            iodict["cb_config_list"] = cbl_val
         config_file.close()
 
 
@@ -197,17 +225,17 @@ def runall():
         if not ioflexset:
             os.environ['ROMIO_HINTS'] = romio_path
 
-        config_exist = None
-        # check if config already exists
-        if infile is not None:
-            config_exist = [line for line in infile if configs_str in line]
+        # config_exist = None
+        # # check if config already exists
+        # if infile is not None:
+        #     config_exist = [line for line in infile if configs_str in line]
         
-        if config_exist is not None and len(config_exist)!= 0:
-            elapsedtime = float(config_exist[0].split(',elapsedtime,')[1])
-            outline = configs_str + "elapsedtime," + str(elapsedtime)+"\n"
-            outfile.write(outline)
-            print("Config found:" + outline)
-            return elapsedtime
+        # if config_exist is not None and len(config_exist)!= 0:
+        #     elapsedtime = float(config_exist[0].split(',elapsedtime,')[1])
+        #     outline = configs_str + "elapsedtime," + str(elapsedtime)+"\n"
+        #     outfile.write(outline)
+        #     print("Config found:" + outline)
+        #     return elapsedtime
 
         # start application
         starttime = 0.0
@@ -218,16 +246,30 @@ def runall():
         out, err = q.communicate()
         elapsedtime = time.time() - starttime
         # Write output of this config
-        outline = configs_str + "elapsedtime," + str(elapsedtime)+"\n"
-        outfile.write(outline)
+
+        iodict["runtime"] = float(elapsedtime)
+
         
+        
+        for f in glob.glob(logfile):
+            dictdarshan = parsedarshan.parsedarshan(f)
+            
+            dictdarshan = parsedarshan.merge(iodict, dictdarshan)
+            
+            new_df = pd.DataFrame([dictdarshan])
+            df = pd.concat([df, new_df], ignore_index=True)
+            os.remove(f)
+            df.to_csv('parsing.csv')
         # Clean application files after every iteration
+        
         for f in files_to_clean:
             if os.path.isfile(f):
                 os.remove(f)
             if os.path.isdir(f):
                 rmtree(f)
-        print("Running config: " + outline)
+
+
+        
     outfile.close()
     if infile is not None:
         infile.close()

@@ -165,7 +165,7 @@ def runall():
     df = pd.DataFrame()
     for solution in sampled_configs:
         iodict = {'appname': appname, 'num_nodes': num_nodes, 'mpi_procs': mpiprocs}
-        
+        print(solution)
         # Set IO Hints using IOFlex or ROMIO HINTS
         if ioflexset:
             config_file = open(os.path.join(dir_path,"config.conf"),'w')
@@ -199,7 +199,7 @@ def runall():
             configs_str += "cb_nodes," + str(cbn_val) + ","
             iodict["cb_nodes"] = cbn_val
         if fstype_id is not None:
-            fstype_val = romio_fs_type[solution[fstype_id]]
+            fstype_val = solution[fstype_id]
             if ioflexset:
                 config_file.write("romio_filesystem_type = " + fstype_val+"\n")
             else:
@@ -208,7 +208,7 @@ def runall():
             configs_str += "romio_filesystem_type," + fstype_val + ","
             iodict["romio_filesystem_type"] = fstype_val
         if dsread_id is not None:
-            dsread_val = romio_ds_read[solution[dsread_id]]
+            dsread_val = solution[dsread_id]
             if ioflexset:
                 config_file.write("romio_ds_read = " + dsread_val+"\n")
             else:
@@ -216,7 +216,7 @@ def runall():
             configs_str += "romio_ds_read," + dsread_val + ","
             iodict["romio_ds_read"] = dsread_val
         if dswrite_id is not None:
-            dswrite_val = romio_ds_write[solution[dswrite_id]]
+            dswrite_val = solution[dswrite_id]
             if ioflexset:
                 config_file.write("romio_ds_write = " + dswrite_val+"\n")
             else:
@@ -224,7 +224,7 @@ def runall():
             configs_str += "romio_ds_write," + dswrite_val + ","
             iodict["romio_ds_write"] = dswrite_val
         if cbread_id is not None:
-            cbread_val = romio_cb_read[solution[cbread_id]]
+            cbread_val = solution[cbread_id]
             if ioflexset:
                 config_file.write("romio_cb_read = " + cbread_val+"\n")
             else:
@@ -232,7 +232,7 @@ def runall():
             configs_str += "romio_cb_read," + cbread_val + ","
             iodict["romio_cb_read"] = cbread_val
         if cbwrite_id is not None:
-            cbwrite_val = romio_cb_write[solution[cbwrite_id]]
+            cbwrite_val = solution[cbwrite_id]
             if ioflexset:
                 config_file.write("romio_cb_write = " + cbwrite_val+"\n")
             else:
@@ -240,7 +240,7 @@ def runall():
             configs_str += "romio_cb_write," + cbwrite_val + ","
             iodict["romio_cb_write"] = cbwrite_val
         if cbl_id is not None:
-            cbl_val = cb_config_list[solution[cbl_id]]
+            cbl_val = solution[cbl_id]
             if ioflexset:
                 config_file.write("cb_config_list = " + cbl_val+"\n")
             else:

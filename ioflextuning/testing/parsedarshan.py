@@ -96,9 +96,9 @@ def parsedarshan(logfile):
             left_on=["id", "rank"],
             right_on=["id", "rank"],
         )
-        dict1 = merge(posix_df[posix_list].sum(axis=0).divide(nprocs).to_dict(), dict1)
+        dict1 = merge(posix_df[posix_list].sum(axis=0).to_dict(), dict1)
         dict1 = merge(
-            posix_df[posix_time_list].sum(axis=0).divide(nprocs * runtime).to_dict(),
+            posix_df[posix_time_list].sum(axis=0).to_dict(),
             dict1,
         )
 
@@ -116,9 +116,9 @@ def parsedarshan(logfile):
             left_on=["id", "rank"],
             right_on=["id", "rank"],
         )
-        dict1 = merge(mpiio_df[mpiio_list].sum(axis=0).divide(nprocs), dict1)
+        dict1 = merge(mpiio_df[mpiio_list].sum(axis=0), dict1)
         dict1 = merge(
-            mpiio_df[mpiio_time_list].sum(axis=0).divide(nprocs * runtime), dict1
+            mpiio_df[mpiio_time_list].sum(axis=0), dict1
         )
 
 

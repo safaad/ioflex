@@ -14,7 +14,7 @@ import numpy
 import itertools
 import parsedarshan
 import glob
-
+import shlex
 # Set of IO Configurations
 ## Lustre Striping
 striping_factor = [4, 8, 16, 24, 32, 40, 48, 64, -1]
@@ -50,7 +50,7 @@ def runall():
     ap.add_argument('--darshan_path', type=str, help="Path to darshan output")
     ap.add_argument('--cmd', '-c', type=str, required=True, action="store", nargs="*", help="Application command line")
 
-    parse = ap.parse_args()
+
     parse = ap.parse_args()
     args = vars(parse)
     global ioflexset

@@ -224,8 +224,8 @@ def ioflexoptuna():
     ap.add_argument(
         "--sampler",
         type=str,
-        choices=["tpe", "rand", "gp", "nsga", "brute", "grid"],
-        help="Sampler used by Optuna supported samplers: tpe (Tree-structured Parzen Estimator), rand (Random Search), gp (BO using Gaussian Processes), nsga (NSGAII), brute (Brute Force (all possibilities), grid (Grid))",
+        choices=["tpe", "rand", "gp", "nsga", "brute", "grid", "auto"],
+        help="Sampler used by Optuna supported samplers: tpe (Tree-structured Parzen Estimator), rand (Random Search), gp (BO using Gaussian Processes), nsga (NSGAII), brute (Brute Force (all possibilities), grid (Grid), auto (AutoSampler))",
         default="tpe",
     )
     ap.add_argument(
@@ -329,6 +329,11 @@ def ioflexoptuna():
         case "brute":
             print("Running with Brute Force")
             sampler = optuna.samplers.BruteForceSampler()
+        case "auto":
+            print("Running with Optuna Auto Sampler")
+            import optunahub
+            module = optunahub.load_module(package="samplers/auto_sampler")
+            sampler = module.AutoSampler()
 
     # Default no pruners
     pruner = optuna.pruners.NopPruner()
@@ -346,6 +351,7 @@ def ioflexoptuna():
             direction="minimize",
             sampler=sampler,
             study_name="optuna_study",
+#            storage="sqlite:///db.sqlite3",
             pruner=pruner,
         )
     else:

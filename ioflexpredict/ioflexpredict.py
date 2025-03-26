@@ -1,105 +1,63 @@
 import pandas as pd
-import darshan
 import numpy as np
-import glob
-import os
 import xgboost as xgb
 from sklearn.metrics import make_scorer
-from sklearn import preprocessing
-from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeRegressor
 import argparse
-import pickle
-#import  utils
+import optuna
+import logging
+import subprocess
+import os
+import sys
+import time
+from shutil import rmtree
+import argparse
+import shlex
+from datetime import datetime
+import joblib
 
-time_cols = [
-    "MPIIO_F_READ_TIME",
-    "MPIIO_F_WRITE_TIME",
-    "MPIIO_F_META_TIME",
-    "POSIX_F_READ_TIME",
-    "POSIX_F_WRITE_TIME",
-    "POSIX_F_META_TIME",
-]
-mpiio_acc = [
-    "MPIIO_SIZE_READ_AGG_0_100",
-    "MPIIO_SIZE_WRITE_AGG_0_100",
-    "MPIIO_SIZE_READ_AGG_100_1K",
-    "MPIIO_SIZE_WRITE_AGG_100_1K",
-    "MPIIO_SIZE_READ_AGG_1K_10K",
-    "MPIIO_SIZE_WRITE_AGG_1K_10K",
-    "MPIIO_SIZE_READ_AGG_10K_100K",
-    "MPIIO_SIZE_WRITE_AGG_10K_100K",
-    "MPIIO_SIZE_READ_AGG_100K_1M",
-    "MPIIO_SIZE_WRITE_AGG_100K_1M",
-    "MPIIO_SIZE_READ_AGG_1M_4M",
-    "MPIIO_SIZE_WRITE_AGG_1M_4M",
-    "MPIIO_SIZE_READ_AGG_4M_10M",
-    "MPIIO_SIZE_WRITE_AGG_4M_10M",
-    "MPIIO_SIZE_READ_AGG_10M_100M",
-    "MPIIO_SIZE_WRITE_AGG_10M_100M",
-    "MPIIO_SIZE_READ_AGG_100M_1G",
-    "MPIIO_SIZE_WRITE_AGG_100M_1G",
-    "MPIIO_SIZE_READ_AGG_1G_PLUS",
-    "MPIIO_SIZE_WRITE_AGG_1G_PLUS",
-]
-mpiio_ops = [
-    "MPIIO_INDEP_OPENS",
-    "MPIIO_COLL_OPENS",
-    "MPIIO_INDEP_WRITES",
-    "MPIIO_COLL_WRITES",
-    "MPIIO_INDEP_READS",
-    "MPIIO_COLL_READS",
-    "MPIIO_SYNCS",
-]
-mpiio_bytes = ["MPIIO_BYTES_READ", "MPIIO_BYTES_WRITTEN"]
 
-posix_acc = [
-    "POSIX_CONSEC_READS",
-    "POSIX_CONSEC_WRITES",
-    "POSIX_SEQ_READS",
-    "POSIX_SEQ_WRITES",
-    "POSIX_SIZE_READ_0_100",
-    "POSIX_SIZE_WRITE_0_100",
-    "POSIX_SIZE_READ_100_1K",
-    "POSIX_SIZE_WRITE_100_1K",
-    "POSIX_SIZE_READ_1K_10K",
-    "POSIX_SIZE_WRITE_1K_10K",
-    "POSIX_SIZE_READ_10K_100K",
-    "POSIX_SIZE_WRITE_10K_100K",
-    "POSIX_SIZE_READ_100K_1M",
-    "POSIX_SIZE_WRITE_100K_1M",
-    "POSIX_SIZE_READ_1M_4M",
-    "POSIX_SIZE_WRITE_1M_4M",
-    "POSIX_SIZE_READ_4M_10M",
-    "POSIX_SIZE_WRITE_4M_10M",
-    "POSIX_SIZE_READ_10M_100M",
-    "POSIX_SIZE_WRITE_10M_100M",
-    "POSIX_SIZE_READ_100M_1G",
-    "POSIX_SIZE_WRITE_100M_1G",
-    "POSIX_SIZE_READ_1G_PLUS",
-    "POSIX_SIZE_WRITE_1G_PLUS",
+
+# Set of IO Configurations
+## Lustre Striping
+striping_factor = [4, 8, 16, 24, 32, 40, 48, 64, -1]
+striping_unit = [
+    1048576,
+    2097152,
+    4194304,
+    8388608,
+    16777216,
+    33554432,
+    67108864,
+    134217728,
 ]
 
-posix_ops = [
-    "POSIX_STATS",
-    "POSIX_SEEKS",
-    "POSIX_MMAPS",
-    "POSIX_FSYNCS",
-    "POSIX_WRITES",
-    "POSIX_READS",
-]
-posix_bytes = ["POSIX_BYTES_READ", "POSIX_BYTES_WRITTEN"]
+## Collective Buffering
+### Adjust number of cb_nodes to total number of nodes
+cb_nodes = [1, 2, 4, 8, 16, 24, 32, 48, 64, 128]
+cb_config_list = []
 
-files_col = ["nb_read-only_files", "nb_write-only_files", "nb_read-write_files"]
+## ROMIO Optimizations
+romio_fs_type = ["LUSTRE:", "UFS:"]
+romio_ds_read = ["automatic", "enable", "disable"]
+romio_ds_write = ["automatic", "enable", "disable"]
+romio_cb_read = ["automatic", "enable", "disable"]
+romio_cb_write = ["automatic", "enable", "disable"]
 
-categ_cols = [
-    "romio_filesystem_type",
-    "romio_ds_read",
-    "romio_ds_write",
-    "romio_cb_read",
-    "romio_cb_write",
-]
-discr_cols = ["striping_factor", "striping_unit"]
+iter_count = 0
+# Application Specific
+# List of files to clean after running application
+files_to_clean = []
+
+
+# Configure Optuna logging to stdout
+optuna.logging.set_verbosity(optuna.logging.INFO)
+logger = logging.getLogger()
+handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 config_cols = [
     "romio_filesystem_type",
@@ -109,239 +67,154 @@ config_cols = [
     "romio_cb_write",
     "striping_factor",
     "striping_unit",
+    "cb_nodes",
+    "cb_config_list"
 ]
 
-
 def smape(y_true, y_pred):
-    """
-    Calculate SMAPE (Symmetric Mean Absolute Percentage Error)
-
-    Parameters:
-    y_true : array-like of shape (n_samples,)
-        True values of the target variable
-    y_pred : array-like of shape (n_samples,)
-        Predicted values of the target variable
-
-    Returns:
-    float
-        SMAPE score as a percentage
-    """
     numerator = np.abs(y_true - y_pred)
     denominator = (np.abs(y_true) + np.abs(y_pred)) / 2
     smape_value = np.mean(numerator / denominator) * 100
     return smape_value
 
-
-def read_dataset(filepath):
-    all_files = glob.glob(os.path.join(filepath, "*.csv"))
-    dfall = pd.concat((pd.read_csv(f) for f in all_files), ignore_index=True)
-
-
-def normalize_dataset(dfall):
-    total_posix_bytes = dfall.POSIX_BYTES_READ + dfall.POSIX_BYTES_WRITTEN
-    total_posix_ops = (
-        dfall.POSIX_WRITES
-        + dfall.POSIX_READS
-        + dfall.POSIX_STATS
-        + dfall.POSIX_SEEKS
-        + dfall.POSIX_MMAPS
-        + dfall.POSIX_FSYNCS
-    )
-    total_posix_accesses = dfall.POSIX_WRITES + dfall.POSIX_READS
-
-    total_mpiio_bytes = dfall.MPIIO_BYTES_READ + dfall.MPIIO_BYTES_WRITTEN
-    total_mpiio_accesses = (
-        dfall.MPIIO_INDEP_WRITES
-        + dfall.MPIIO_COLL_WRITES
-        + dfall.MPIIO_INDEP_READS
-        + dfall.MPIIO_COLL_READS
-    )
-    total_mpiio_ops = (
-        dfall.MPIIO_INDEP_OPENS
-        + dfall.MPIIO_COLL_OPENS
-        + dfall.MPIIO_INDEP_WRITES
-        + dfall.MPIIO_COLL_WRITES
-        + dfall.MPIIO_INDEP_READS
-        + dfall.MPIIO_COLL_READS
-        + dfall.MPIIO_SYNCS
-    )
-
-    dfall["POSIX_BYTES_TOTAL"] = total_posix_bytes
-    dfall["POSIX_OPS"] = total_posix_ops
-    dfall["POSIX_ACCESS_TOTAL"] = total_posix_accesses
-
-    dfall["MPIIO_BYTES_TOTAL"] = total_mpiio_bytes
-    dfall["MPIIO_OPS"] = total_mpiio_ops
-    dfall["MPIIO_ACCESS_TOTAL"] = total_mpiio_accesses
-
-    df = pd.DataFrame()
-    df = pd.DataFrame()
-    for c in time_cols:
-        df[c] = dfall[c] / dfall["runtime"]
-    for c in mpiio_acc:
-        df[c] = dfall[c] / dfall["MPIIO_ACCESS_TOTAL"]
-    for c in mpiio_bytes:
-        df[c] = dfall[c] / dfall["MPIIO_BYTES_TOTAL"]
-    for c in mpiio_ops:
-        df[c] = dfall[c] / dfall["MPIIO_OPS"]
-
-    for c in posix_acc:
-        df[c] = dfall[c] / dfall["POSIX_ACCESS_TOTAL"]
-    for c in posix_ops:
-        df[c] = dfall[c] / dfall["POSIX_OPS"]
-    for c in posix_bytes:
-        df[c] = dfall[c] / dfall["POSIX_BYTES_TOTAL"]
-
-    for c in files_col:
-        df[c] = dfall[c] / dfall["total_files"]
-
-    for c in categ_cols:
-        dfall[c] = dfall[c].astype("category")
-        df[c] = dfall[c].cat.codes
-
-    for c in discr_cols:
-        df[c] = dfall[c]
-
-    df["runtime"] = dfall["runtime"]
-    return df
-
-
-def get_data(df):
-    df = df.drop("config",axis=1)
-    X = df.loc[:, (df.columns != "runtime")].to_numpy()
-    y = df["runtime"].to_numpy()
-    return X, y
-
-
-def split_train_test(df):
-    # make sure to remove overlapping values
-    df["config"] = (
-        df["romio_filesystem_type"].astype(str)
-        + "-"
-        + df["romio_ds_read"].astype(str)
-        + "-"
-        + df["romio_ds_write"].astype(str)
-        + "-"
-        + df["romio_cb_read"].astype(str)
-        + "-"
-        + df["romio_cb_write"].astype(str)
-        + "-"
-        + df["striping_factor"].astype(str)
-        + "-"
-        + df["striping_unit"].astype(str)
-    )
-    train_conf, test_conf = train_test_split(
-        df["config"].unique(), random_state=123, test_size=0.2, shuffle=True
-    )
-    train = df.loc[df["config"].isin(train_conf)]
-    test = df.loc[df["config"].isin(test_conf)]
+def predict_instance(model, category_mappings, instance):
     
-    train = train.drop("config", axis=1)
-    test = test.drop("config", axis=1)
+    for col, mapping in category_mappings.items():
+        instance[col] = mapping.get(instance[col], -1)
 
-    X_train = train.loc[:, (train.columns != "runtime")].to_numpy()
-    X_test = test.loc[:, (test.columns != "runtime")].to_numpy()
-    y_train = train["runtime"].to_numpy()
-    y_test = test["runtime"].to_numpy()
-    return X_train, X_test, y_train, y_test
+    instance_df = pd.DataFrame([instance])
+    prediction = model.predict(instance_df)[0]
+    return prediction
 
+def eval_func(model, category_mappings, trial):
+    
+    dir_path = os.environ.get("PWD", os.getcwd())
+    config_path = os.path.join(dir_path, "config.conf" if ioflexset else "romio-hints")
+    with open(config_path, "w") as config_file:
+        sample_instance = {}
+        config_entries = {
+            "striping_factor": striping_factor,
+            "striping_unit": striping_unit,
+            "cb_nodes": cb_nodes,
+            "romio_filesystem_type": romio_fs_type,
+            "romio_ds_read": romio_ds_read,
+            "romio_ds_write": romio_ds_write,
+            "romio_cb_read": romio_cb_read,
+            "romio_cb_write": romio_cb_write,
+            "cb_config_list": cb_config_list
+        }
 
-def create_test_xgboost_model(X_train, X_test, y_train, y_test):
-    # Initialize XGBoost Regressor
-    xg_reg = xgb.XGBRegressor(
-        objective="reg:squarederror",
-        n_estimators=100,
-        learning_rate=0.1,
-        max_depth=5,
-        random_state=42,
+        configs_str = ""
+        for key, values in config_entries.items():
+            if values:
+                selected_val = trial.suggest_categorical(key, values)
+                if ioflexset:
+                    config_file.write(f"{key} = {selected_val}\n")
+                else:
+                    config_file.write(f"{key} {selected_val}\n")
+                    
+                configs_str += str(selected_val) + ","
+                sample_instance[key] = selected_val
+                if key == "striping_unit":
+                    config_file.write(f"cb_buffer_size = {selected_val}\n")
+                if key == "romio_filesystem_type":
+                    os.environ["ROMIO_FSTYPE_FORCE"] = selected_val
+    
+    # Use ROMIO HINTS if IOFLex is not enabled
+    if not ioflexset:
+        os.environ["ROMIO_HINTS"] = config_path
+
+    # start application
+    starttime = time.time()
+    q = subprocess.Popen(
+        shlex.split(run_app), stdout=subprocess.PIPE, shell=False, cwd=os.getcwd()
     )
+    out, err = q.communicate()
+    elapsedtime = time.time() - starttime
+    
+    predtime = predict_instance(model, category_mappings, sample_instance)
+    outline = f"{configs_str}{elapsedtime},{predtime}\n"
+    outfile.write(outline)
 
-    # Train the model
-    xg_reg.fit(X_train, y_train)
+    if logisset:
+        logfile_o.write(f"Config: {configs_str}\n\n{out.decode()}\n")
+        logfile_e.write(f"Config: {configs_str}\n\n{err.decode()}\n")
 
-    # Predict on test set
-    y_pred = xg_reg.predict(X_test)
+    for f in files_to_clean:
+        if os.path.exists(f):
+            os.remove(f) if os.path.isfile(f) else rmtree(f)
+            
+    print("Running config: " + outline)
+    return elapsedtime
 
-    # Calculate SMAPE
-    smape_value = smape(y_test, y_pred)
-    print(f"SMAPE: {smape_value:.2f}%")
-    return xg_reg
 
-
-def create_xgboost_model(X, y):
-    # Initialize XGBoost Regressor
-    xg_reg = xgb.XGBRegressor(
-        objective="reg:squarederror",
-        n_estimators=100,
-        learning_rate=0.1,
-        max_depth=5,
-        random_state=42,
-    )
-    # Train the model
-    xg_reg.fit(X, y)
-    return xg_reg
-
-def save_model(outmodelfile, model):
-    with open(outmodelfile, 'wb') as file:  
-        pickle.dump(model, file)
-
-def load_model(modelfile):
-    with open(modelfile, 'rb') as file:  
-        model = pickle.load(file)
-        return model
-
+configs_space = {}
 
 def ioflexpredict():
-    #printheader()
-    ap = argparse.ArgumentParser(add_help=True)
-    ap.add_argument(
-        "--algo",
-        type=str,
-        default="xgb",
-        help="Machine Learning Algorithm",
-        choices=["xgb"]
-    )
-    ap.add_argument(
-        "--outmodelfile",
-        type=str,
-        help="Filename to save the pickeled  model",
-        default="model.pkl"
-    )
-    ap.add_argument(
-        "--dataset",
-        type=str,
-        help="Path to the training dataset",
-        required=True
-    )
-    ap.add_argument("--test",
-                    action="store_true",
-                    default=False,
-                    help="Get initial score of mode")
-    parse = ap.parse_args()
-    args = vars(parse)
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--ioflex", action="store_true", default=False, help="IOFlex is enabled")
+    ap.add_argument("--outfile", type=str, default="./OutIOFlexOptuna.csv", help="Path to output CSV file")
+    ap.add_argument("--inoptuna", type=str, default=None, help="Optuna study pickled file from previous runs")
+    ap.add_argument("--outoptuna", "-o", type=str, default="./optuna_study.pkl", help="Optuna study output pkl file")
+    ap.add_argument("--cmd", "-c", type=str, required=True, nargs="*", help="Application command line")
+    ap.add_argument("--max_trials", type=int, default=50, help="Max number of trials")
+    ap.add_argument("--sampler", type=str, choices=["tpe", "rand", "gp", "nsga", "brute", "grid", "auto"], default="tpe", help="Sampler used by Optuna")
+    ap.add_argument("--trained-model", type=str, required=True, help="Path to the trained model")
+    ap.add_argument("--with_log_path", type=str, default=None, help="Path for logging application output")
+    ap.add_argument("--cat-mapping", type=str, required=True, help="Input category mappings")
+    args = vars(ap.parse_args())
     
-    algo = args["algo"]
-    dataset = args["dataset"]
-    outmodelfile = args["outmodelfile"]
+    global ioflexset, run_app, outfile, logisset, logfile_o, logfile_e
+    ioflexset = args["ioflex"]
+    run_app = " ".join(args["cmd"])
+    outfile = open(args["outfile"], "w")
     
-    dfall = pd.read_csv(dataset)
-    df = normalize_dataset(dfall)
+    category_mappings = joblib.load(args["cat-mapping"])
+    model = joblib.load(args["trained-model"])
     
-    # initial model score
-    if args["test"]:
-        X_train, X_test, y_train, y_test = split_train_test(df)
-        create_test_xgboost_model(X_train, X_test, y_train, y_test)
+    logisset = bool(args["with_log_path"])
+    if logisset:
+        os.makedirs(args["with_log_path"], exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H.%M.%S")
+        logfile_o = open(os.path.join(args["with_log_path"], f"out.{timestamp}"), "w")
+        logfile_e = open(os.path.join(args["with_log_path"], f"err.{timestamp}"), "w")
     
-    # Train Model
-    X, y = get_data(df)
-    match algo:
-        case "xgb":
-            model = create_xgboost_model(X,y)
+    print("Starting Optuna Tuning")
     
-    # Pickle and save file
-    save_model(outmodelfile, model)    
+    config_space = {key: globals()[key] for key in [
+        "striping_factor", "striping_unit", "cb_nodes", "romio_fs_type",
+        "romio_ds_read", "romio_ds_write", "romio_cb_read", "romio_cb_write", "cb_config_list"
+    ] if len(globals()[key]) > 0}
     
+    header_str = ",".join(config_space.keys()) + ",pred-time,real-time\n"
+    outfile.write(header_str)
     
+    samplers = {
+        "tpe": optuna.samplers.TPESampler(),
+        "gp": optuna.samplers.GPSampler(),
+        "rand": optuna.samplers.RandomSampler(),
+        "nsga": optuna.samplers.NSGAIISampler(),
+        "grid": optuna.samplers.GridSampler(config_space),
+        "brute": optuna.samplers.BruteForceSampler(),
+        "auto": optuna.create_study().sampler,
+    }
+    
+    sampler = samplers.get(args["sampler"], optuna.samplers.TPESampler())
+    
+    if args["inoptuna"]:
+        study = joblib.load(args["inoptuna"])
+    else:
+        study = optuna.create_study(direction="minimize", sampler=sampler, study_name="optuna_study")
+    
+    study.optimize(lambda trial: eval_func(trial, model, category_mappings), n_trials=args["max_trials"])
+    
+    print("Best trial:", study.best_trial)
+    joblib.dump(study, args["outoptuna"])
+    outfile.close()
+    if logisset:
+        logfile_o.close()
+        logfile_e.close()
+
 
 if __name__ == "__main__":
     ioflexpredict()

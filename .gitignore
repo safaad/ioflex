@@ -109,3 +109,6 @@ Makefile
 
 *.lai
 romio-hints
+
+*.pkl
+test.py

@@ -76,19 +76,21 @@ def main():
         
         config_path = os.path.join(os.getcwd(), "config.conf" if ioflexset else "romio-hints")
         with open(config_path, "w") as config_file:
+            config_entries = []
             for key, values in CONFIG_ENTRIES.items():
                 if values:
-                    value = solution[list(CONFIG_ENTRIES.keys()).index(key)]
-                if ioflexset:
-                    config_file.write(f"{key} = {value}\n")
-                else:
-                    config_file.write(f"{key} {value}\n")
-                iodict[key] = value
+                    selected_val = solution[list(CONFIG_ENTRIES.keys()).index(key)]
+                    separator = " = " if ioflexset else " "
+                    
+                    config_file.write(f"{key}{separator}{selected_val}\n")
+                    config_entries.append(str(selected_val))
+
                 if key == "striping_unit":
-                    config_file.write(f"cb_buffer_size = {value}\n")
-                if key == "romio_fs_type":
-                    os.environ["ROMIO_FSTYPE_FORCE"] = value
-    
+                    config_file.write(f"cb_buffer_size{separator}{selected_val}\n")
+                elif key == "romio_filesystem_type":
+                    os.environ["ROMIO_FSTYPE_FORCE"] = selected_val 
+
+        configs_str = ",".join(config_entries)
         if not ioflexset:
             os.environ["ROMIO_HINTS"] = config_path
         

@@ -13,17 +13,12 @@ import joblib
 import logging
 from datetime import datetime
 from shutil import rmtree
-
-# Set of IO Configurations
-striping_factor = [4, 8, 16, 24, 32, 40, 48, 64, -1]
-striping_unit = [1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728]
-cb_nodes = [1, 2, 4, 8, 16, 24, 32, 48, 64, 128]
-cb_config_list = []
-romio_fs_type = ["LUSTRE:", "UFS:"]
-romio_ds_read = ["automatic", "enable", "disable"]
-romio_ds_write = ["automatic", "enable", "disable"]
-romio_cb_read = ["automatic", "enable", "disable"]
-romio_cb_write = ["automatic", "enable", "disable"]
+dir_path = os.path.dirname(os.path.realpath(__file__))
+parent_dir_path = os.path.abspath(os.path.join(dir_path, os.pardir))
+sys.path.insert(0, parent_dir_path)
+from ioflexpredict import ioflexpredict
+from ioflexheader import SAMPLER_MAP, PRUNER_MAP, CONFIG_MAP as config
+from utils import header
 
 
 # Application Specific
@@ -33,51 +28,68 @@ files_to_clean = []
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-def eval_func(trial):
+def get_sampler(sampler_name, config_space=None):
 
-    dir_path = os.getcwd()
+    if sampler_name not in SAMPLER_MAP:
+        raise ValueError(f"Invalid sampler: '{sampler_name}'. Choose from {list(SAMPLER_MAP.keys())}.")
+    
+    sampler_desc, sampler_class = SAMPLER_MAP[sampler_name]
+    logging.info(f"Running with {sampler_desc}")
+    
+    return sampler_class() if sampler_name != "grid" else sampler_class(config_space)
+
+def get_pruner(pruner_name):
+    
+    if pruner_name not in PRUNER_MAP:
+        logging.warning(f"Invalid pruner '{pruner_name}'. Using NopPruner by default.")
+        return optuna.pruners.NopPruner()
+    
+    logging.info(f"Using {pruner_name} pruner.")
+    return PRUNER_MAP[pruner_name]()
+
+def eval_func(trial, model=None):
+
+    dir_path = os.environ.get("PWD", os.getcwd())
     config_path = os.path.join(dir_path, "config.conf" if ioflexset else "romio-hints")
 
     with open(config_path, "w") as config_file:
         sample_instance = {}
-        config_entries = {
-            "striping_factor": striping_factor,
-            "striping_unit": striping_unit,
-            "cb_nodes": cb_nodes,
-            "romio_filesystem_type": romio_fs_type,
-            "romio_ds_read": romio_ds_read,
-            "romio_ds_write": romio_ds_write,
-            "romio_cb_read": romio_cb_read,
-            "romio_cb_write": romio_cb_write,
-            "cb_config_list": cb_config_list
-        }
-        
         configs_str = ""
-        for key, values in config_entries.items():
-            if values:
-                selected_val = trial.suggest_categorical(key, values)
-                if ioflexset:
-                    config_file.write(f"{key} = {selected_val}\n")
-                else:
-                    config_file.write(f"{key} {selected_val}\n")
-                    
-                configs_str += str(selected_val) + ","
-                sample_instance[key] = selected_val
-                if key == "striping_unit":
-                    config_file.write(f"cb_buffer_size = {selected_val}\n")
-                if key == "romio_filesystem_type":
-                    os.environ["ROMIO_FSTYPE_FORCE"] = selected_val
+        configs_list = []
+        
+        for key, values in config.items():
+            if not values:
+                continue
+
+            selected_val = trial.suggest_categorical(key, values)
+            sample_instance[key] = selected_val
+            configs_list.append(str(selected_val))
+            
+            separator = " = " if ioflexset else " "
+            config_file.write(f"{key}{separator}{selected_val}\n")
+
+            # Special handling for specific keys
+            if key == "striping_unit":
+                config_file.write(f"cb_buffer_size{separator}{selected_val}\n")
+            elif key == "romio_filesystem_type":
+                os.environ.update({"ROMIO_FSTYPE_FORCE": selected_val})
     
+    configs_str = ",".join(configs_list)
     # Use ROMIO HINTS if IOFLex is not enabled
     if not ioflexset:
         os.environ["ROMIO_HINTS"] = config_path
 
     start_time = time.time()
-    process = subprocess.Popen(shlex.split(run_app), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    process = subprocess.Popen(shlex.split(run_app), stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False, cwd=os.getcwd())
     out, err = process.communicate()
-    elapsed_time = time.time() - start_time
+    elapsedtime = time.time() - start_time
     
-    outline = f"{configs_str}{elapsed_time}\n"
+    if model:
+        predtime = ioflexpredict.predict_instance(model, sample_instance)
+        outline = f"{configs_str},{elapsedtime},{predtime}\n"
+    else:
+        outline = f"{configs_str},{elapsedtime}\n"
+    
     outfile.write(outline)
     
     if logisset:
@@ -90,7 +102,7 @@ def eval_func(trial):
     
     logger.info(f"Running config: {outline}")
     
-    return elapsed_time
+    return elapsedtime
 
 
 
@@ -99,12 +111,13 @@ def ioflexoptuna():
     ap.add_argument("--ioflex", action="store_true", default=False, help="Enable IOFlex")
     ap.add_argument("--outfile", type=str, default="./OutIOFlexOptuna.csv", help="Path to output CSV file")
     ap.add_argument("--inoptuna", type=str, default=None, help="Optuna study pickled file")
-    ap.add_argument("--outoptuna", "-o", type=str, default="./optuna_study.pkl", help="Optuna study output pkl file")
+    ap.add_argument("--outoptuna", "-o", type=str, default="./optuna_study.pkl", help="Path to Optuna Study output")
     ap.add_argument("--cmd", "-c", type=str, required=True, nargs="*", help="Application command line")
     ap.add_argument("--max_trials", type=int, default=50, help="Max number of trials")
     ap.add_argument("--sampler", type=str, choices=["tpe", "rand", "gp", "nsga", "brute", "grid", "auto"], default="tpe", help="Optuna sampler")
     ap.add_argument("--pruner", type=str, choices=["hyper", "median", "successivehalving", "nop"], default="nop", help="Optuna pruner")
-    ap.add_argument("--with_log_path", type=str, default=None, help="Path for logging output")
+    ap.add_argument("--with_log_path", type=str, default=None, help="Output logging path")
+    ap.add_argument("--with_model", type=str, default=None, help="Path to trained prediction model")
     args = vars(ap.parse_args())
     
     global ioflexset, run_app, outfile, logisset, logfile_o, logfile_e
@@ -112,22 +125,46 @@ def ioflexoptuna():
     run_app = " ".join(args["cmd"])
     outfile = open(args["outfile"], "w")
     
-    logisset = bool(args["with_log_path"])
+    
+    model = joblib.load(args["with_model"]) if args["with_model"] else None
+
+    
+    logisset = bool(args["with_log_path"]) 
     if logisset:
         os.makedirs(args["with_log_path"], exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H.%M.%S")
         logfile_o = open(os.path.join(args["with_log_path"], f"out.{timestamp}"), "w")
         logfile_e = open(os.path.join(args["with_log_path"], f"err.{timestamp}"), "w")
 
-    sampler = getattr(optuna.samplers, f"{args['sampler'].capitalize()}Sampler")()
-    pruner = getattr(optuna.pruners, f"{args['pruner'].capitalize()}Pruner", optuna.pruners.NopPruner)()
+
+    # Define parameter mappings
+    config_space = {}
+    header_items = []
+
+    # Populate config_space and header list
+    for key, value in config.items():
+        if value:  # Avoids unnecessary len() calls
+            config_space[key] = value
+            header_items.append(key)
+    
+    header_items.append("elapsedtime")
+    if args["with_model"]:
+        header_items.append("predicttime")
+
+                
+    header_str = ",".join(header_items) + '\n'
+    outfile.write(header_str)
+
+    sampler = get_sampler(args["sampler"], config_space)
+    pruner = get_pruner(args["pruner"])
+    
     
     if args["inoptuna"]:
         study = joblib.load(args["inoptuna"])
     else:
-        study = optuna.create_study(direction="minimize", sampler=sampler, pruner=pruner)
+        study = optuna.create_study(direction="minimize", sampler=sampler, pruner=pruner, study_name="ioflexoptuna_study")
     
-    study.optimize(eval_func, n_trials=args["max_trials"])
+    study.optimize(lambda trial: eval_func(trial, model), n_trials=args["max_trials"])
     
     logger.info(f"Best trial: {study.best_trial}")
     joblib.dump(study, args["outoptuna"])
@@ -139,4 +176,5 @@ def ioflexoptuna():
 
 
 if __name__ == "__main__":
+    header.printheader()
     ioflexoptuna()

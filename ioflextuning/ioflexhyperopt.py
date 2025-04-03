@@ -7,58 +7,63 @@ import shlex
 import subprocess
 import logging
 import joblib
+import functools
 from datetime import datetime
 from shutil import rmtree
 from hyperopt import fmin, tpe, Trials, rand, hp, anneal
+dir_path = os.path.dirname(os.path.realpath(__file__))
+parent_dir_path = os.path.abspath(os.path.join(dir_path, os.pardir))
+sys.path.insert(0, parent_dir_path)
+from ioflexpredict import ioflexpredict
+from ioflexheader import CONFIG_MAP
+from utils import header 
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-# Set of IO Configurations
-CONFIG_ENTRIES = {
-    "striping_factor": [4, 8, 16, 24, 32, 40, 48, 64, -1],
-    "striping_unit": [1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728],
-    "cb_nodes": [1, 2, 4, 8, 16, 24, 32, 48, 64, 128],
-    "cb_config_list": [],
-    "romio_fs_type": ["LUSTRE:", "UFS:"],
-    "romio_ds_read": ["automatic", "enable", "disable"],
-    "romio_ds_write": ["automatic", "enable", "disable"],
-    "romio_cb_read": ["automatic", "enable", "disable"],
-    "romio_cb_write": ["automatic", "enable", "disable"]
-}
-
 files_to_clean = []
 
-def eval_func(params):
+def eval_func(params, model):
+
     dir_path = os.getcwd()
     config_path = os.path.join(dir_path, "config.conf" if ioflexset else "romio-hints")
 
     with open(config_path, "w") as config_file:
-        configs_str = ""
-        for key, values in CONFIG_ENTRIES.items():
-            if values:
-                selected_val = params[key]
-                if ioflexset:
-                    config_file.write(f"{key} = {selected_val}\n")
-                else:
-                    config_file.write(f"{key} {selected_val}\n")
-                configs_str += f"{selected_val},"
-                if key == "striping_unit":
-                    config_file.write(f"cb_buffer_size = {selected_val}\n")
-                if key == "romio_fs_type":
-                    os.environ["ROMIO_FSTYPE_FORCE"] = selected_val
+        sample_instance = {}
+        configs_list = []
+        
+        for key, values in CONFIG_MAP.items():
+            if not values:
+                continue
+            
+            selected_val = params[key]
+            separator = " = " if ioflexset else " "
+            sample_instance[key] = selected_val
+            print(sample_instance)
+            config_file.write(f"{key}{separator}{selected_val}\n")
+            configs_list.append(str(selected_val))
 
-    # Use ROMIO HINTS if IOFLex is not enabled
+            if key == "striping_unit":
+                config_file.write(f"cb_buffer_size{separator}{selected_val}\n")
+            elif key == "romio_filesystem_type":
+                os.environ["ROMIO_FSTYPE_FORCE"] = selected_val 
+
+    configs_str = ",".join(configs_list)
     if not ioflexset:
         os.environ["ROMIO_HINTS"] = config_path
 
     start_time = time.time()
     process = subprocess.Popen(shlex.split(run_app), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = process.communicate()
-    elapsed_time = time.time() - start_time
+    elapsedtime = time.time() - start_time
     
-    outline = f"{configs_str}{elapsed_time}\n"
+    if model:
+        predtime = ioflexpredict.predict_instance(model, sample_instance)
+        outline = f"{configs_str},{elapsedtime},{predtime}\n"
+    else:
+        outline = f"{configs_str},{elapsedtime}\n"
+    
     outfile.write(outline)
     
     if logisset:
@@ -71,7 +76,7 @@ def eval_func(params):
     
     logger.info(f"Running config: {outline}")
     
-    return elapsed_time
+    return elapsedtime
 
 
 configs_space = {}
@@ -86,10 +91,10 @@ def ioflexhyperopt():
     ap.add_argument("--outhyperopt", "-o", type=str, default="./hyperopt_trails.pkl", help="Output pickle file for Hyperopt instance")
     ap.add_argument("--cmd", "-c", type=str, required=True, nargs="*", help="Application command line")
     ap.add_argument("--max_evals", type=int, default=50, help="Max number of evaluations")
-    ap.add_argument("--algorithm", type=str, choices=["tpe", "rand", "anneal", "gp"], default="tpe",
-                    help="Hyperopt Algorithm: tpe (Tree-structured Parzen Estimator), rand (Random Search), anneal (Simulated Annealing), gp (Gaussian Process)")
+    ap.add_argument("--algorithm", type=str, choices=["tpe", "rand", "anneal"], default="tpe",
+                    help="Hyperopt Algorithm: tpe (Tree-structured Parzen Estimator), rand (Random Search), anneal (Simulated Annealing)")
     ap.add_argument("--with_log_path", type=str, default=None, help="Path for logging program output")
-    
+    ap.add_argument("--with_model", type=str, default=None, help="Path to trained prediction model")
     args = vars(ap.parse_args())
     
     global ioflexset, run_app, outfile, logisset, logfile_o, logfile_e
@@ -97,9 +102,9 @@ def ioflexhyperopt():
     run_app = " ".join(args["cmd"])
     outfile = open(args["outfile"], "w")
 
-    global run_app
-    run_app = " ".join(args["cmd"])
-
+    # global model
+    model = joblib.load(args["with_model"]) if args["with_model"] else None
+    
     logisset = bool(args["with_log_path"])
     if logisset:
         os.makedirs(args["with_log_path"], exist_ok=True)
@@ -109,24 +114,32 @@ def ioflexhyperopt():
 
     print("Starting HyperOpt Tuning")
 
-    global max_evals, iter_count
+    configs_space = {key: hp.choice(key, values) for key, values in CONFIG_MAP.items() if values}
 
-    global no_of_configs
-    no_of_configs = 0
 
-    configs_space = {key: hp.choice(key, values) for key, values in CONFIG_ENTRIES.items() if values}
+    header_items = []   
+    for key, values in CONFIG_MAP.items():
+        if values:
+            header_items.append(key)
 
+    header_items.append("elapsedtime")
+    if args["with_model"]:
+        header_items.append("predicttime")
+
+    header_str = ",".join(header_items) + "\n"
+    outfile.write(header_str)
+    
     algo_dict = {
         "tpe": tpe.suggest,
         "rand": rand.suggest,
-        "anneal": anneal.suggest
+        "anneal": anneal.suggest,
     }
     
     algo = algo_dict.get(args["algorithm"], tpe.suggest)
 
     trials = Trials() if args["inhyperopt"] is None else joblib.load(args["inhyperopt"])
-
-    best = fmin(fn=eval_func, space=configs_space, algo=algo, max_evals=args["max_evals"], trials=trials)
+    eval_func_partial = functools.partial(eval_func, model=model)
+    best = fmin(fn=eval_func_partial, space=configs_space, algo=algo, max_evals=args["max_evals"], trials=trials)
     
     logger.info(f"Best parameters: {best}")
     joblib.dump(trials, args["outhyperopt"])
@@ -138,4 +151,5 @@ def ioflexhyperopt():
 
 
 if __name__ == "__main__":
+    header.printheader()
     ioflexhyperopt()

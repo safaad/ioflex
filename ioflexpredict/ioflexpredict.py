@@ -1,233 +1,328 @@
 import pandas as pd
-import numpy as np
+pd.set_option('future.no_silent_downcasting', True)
 import xgboost as xgb
-from sklearn.metrics import make_scorer
-from sklearn.tree import DecisionTreeRegressor
 import argparse
 import optuna
-import logging
-import subprocess
-import os
-import sys
-import time
-from shutil import rmtree
-import argparse
-import shlex
-from datetime import datetime
+from sklearn.model_selection import train_test_split, GridSearchCV, KFold
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestRegressor
+import itertools
 import joblib
+import os, sys
+import sys, os
+dir_path = os.path.dirname(os.path.realpath(__file__))
+parent_dir_path = os.path.abspath(os.path.join(dir_path, os.pardir))
+sys.path.insert(0, parent_dir_path)
+from ioflexheader import CONFIG_MAP, CATECORY_MAP, smape
+from utils import header
+
+def random_forest_regression_optuna(X, y, n_trials=100):
+
+    # Split data into train and validation sets
+    X_train, X_valid, y_train, y_valid = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
+
+    # Objective function for Random Forest tuning with SMAPE minimization
+    def objective(trial):
+        param = {
+            "n_estimators": trial.suggest_int("n_estimators", 200, 2000, step=200),
+            "max_depth": trial.suggest_int("max_depth", 3, 15),
+            "min_samples_split": trial.suggest_int("min_samples_split", 2, 10),
+            "min_samples_leaf": trial.suggest_int("min_samples_leaf", 1, 8),
+            "max_features": trial.suggest_categorical(
+                "max_features", [None, "sqrt", "log2"]
+            ),
+            "bootstrap": trial.suggest_categorical("bootstrap", [True, False]),
+            "random_state": 42,  
+        }
+
+        # Train the model with suggested hyperparameters
+        model = RandomForestRegressor(**param)
+        model.fit(X_train, y_train)
+
+        # Predict and calculate SMAPE
+        preds = model.predict(X_valid)
+
+        # Calculate SMAPE as the evaluation metric
+        smape_score = smape(y_valid, preds)
+        return smape_score  # Return SMAPE to minimize it
+
+    sampler = optuna.samplers.GPSampler()
+    # Create Optuna study to minimize SMAPE
+    study = optuna.create_study(direction="minimize", sampler=sampler)
+
+    # Optimize the model
+    study.optimize(objective, n_trials=n_trials)
+    print(f"Best Trial: {study.best_trial.params}")
+
+    # Output the best trial parameters
+    return study.best_trial.params
 
 
+def dt_regression_optuna(X, y, n_trials=100):
 
-# Set of IO Configurations
-# Set of IO Configurations
-striping_factor = [4, 8, 16, 24, 32, 40, 48, 64, -1]
-striping_unit = [1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728]
-cb_nodes = [1, 2, 4, 8, 16, 24, 32, 48, 64, 128]
-cb_config_list = []
-romio_fs_type = ["LUSTRE:", "UFS:"]
-romio_ds_read = ["automatic", "enable", "disable"]
-romio_ds_write = ["automatic", "enable", "disable"]
-romio_cb_read = ["automatic", "enable", "disable"]
-romio_cb_write = ["automatic", "enable", "disable"]
+    # Split data into train and validation sets
+    X_train, X_valid, y_train, y_valid = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
+    # Objective function for Decision Tree tuning with SMAPE minimization
+    def objective(trial):
+        param = {
+            "max_depth": trial.suggest_int("max_depth", 3, 15),
+            "min_samples_split": trial.suggest_int("min_samples_split", 2, 20),
+            "min_samples_leaf": trial.suggest_int("min_samples_leaf", 1, 20),
+            "max_features": trial.suggest_categorical(
+                "max_features", ["sqrt", "log2", None]
+            ),
+            "criterion": trial.suggest_categorical(
+                "criterion", ["squared_error", "absolute_error"]
+            ),
+            "splitter": trial.suggest_categorical("splitter", ["best", "random"]),
+        }
 
-SAMPLER_MAP = {
-    "gp": ("Gaussian Processes", optuna.samplers.GPSampler),
-    "rand": ("Random Search", optuna.samplers.RandomSampler),
-    "nsga": ("NSGA-II", optuna.samplers.NSGAIISampler),
-    "grid": ("Grid Search", optuna.samplers.GridSampler),
-    "brute": ("Brute Force", optuna.samplers.BruteForceSampler),
-    "tpe": ("TPE Sampler", optuna.samplers.TPESampler),
-}
+        # Train the model with suggested hyperparameters
+        model = DecisionTreeRegressor(**param, random_state=42)
+        model.fit(X_train, y_train)
 
-PRUNER_MAP = {
-    "median": optuna.pruners.MedianPruner,
-    "hyper": optuna.pruners.HyperbandPruner,
-    "successivehalving": optuna.pruners.SuccessiveHalvingPruner,
-    "nop" : optuna.pruners.NopPruner,
-}
+        # Predict and calculate SMAPE
+        preds = model.predict(X_valid)
 
-# Application Specific
-files_to_clean = []
+        # Calculate SMAPE as the evaluation metric
+        smape_score = smape(y_valid, preds)
+        return smape_score  # Return SMAPE to minimize it
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+    # Create Optuna study to minimize SMAPE
+    study = optuna.create_study(direction="minimize")
 
-config_cols = [
-    "romio_filesystem_type",
-    "romio_ds_read",
-    "romio_ds_write",
-    "romio_cb_read",
-    "romio_cb_write",
-    "striping_factor",
-    "striping_unit",
-    "cb_nodes",
-    "cb_config_list"
-]
+    # Optimize the model
+    study.optimize(objective, n_trials=n_trials)
+    print(f"Best Trial: {study.best_trial.params}")
 
-def get_sampler(sampler_name, config_space=None):
+    # Output the best trial parameters
+    return study.best_trial.params
 
-    if sampler_name not in SAMPLER_MAP:
-        raise ValueError(f"Invalid sampler: '{sampler_name}'. Choose from {list(SAMPLER_MAP.keys())}.")
+
+def xgb_regression_optuna(X, y, n_trials=100):
+
+    # Split data into train and validation sets
+    X_train, X_valid, y_train, y_valid = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
+
+    # Objective function for XGBoost tuning with SMAPE minimization
+    def objective(trial):
+        param = {
+            'objective': 'reg:squarederror',
+            "subsample": trial.suggest_float("subsample", 0.6, 1.0),
+            'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
+            "n_estimators": trial.suggest_int("n_estimators", 50, 200, step=50),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
+            "max_depth": trial.suggest_int("max_depth", 3, 12),
+            'random_state': 42
+        }
+
+        # Train the model with suggested hyperparameters
+        model = xgb.XGBRegressor(**param)
+        model.fit(X_train, y_train)
+
+        # Predict and calculate SMAPE
+        preds = model.predict(X_valid)
+
+        smape_score = smape(y_valid, preds)
+        return smape_score
+
+    # Create Optuna study to minimize SMAPE
+    study = optuna.create_study(direction="minimize")
+
+    # Optimize the model
+    study.optimize(objective, n_trials=n_trials)
+    print(f"Best Trial: {study.best_trial.params}")
+
+    # Output the best trial parameters
+    return study.best_trial.params
+
+def xgb_regression_gridsearch(X, y):
+
+    # Define hyperparameter grid for tuning
+    param_grid = {
+        "n_estimators": [50, 100, 200, 500, 1000],
+        "max_depth": [3, 5, 7, 10],
+        "learning_rate": [0.01, 0.1, 0.2],
+        "subsample": [0.8, 1.0],
+        "colsample_bytree": [0.8, 1.0]
+    }
+
+    # Initialize XGBoost Regressor
+    xgb_regressor = xgb.XGBRegressor(objective="reg:squarederror", random_state=42)
+
+    # Perform GridSearchCV for hyperparameter tuning
+    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    grid_search = GridSearchCV(estimator=xgb_regressor, param_grid=param_grid, 
+                            scoring='neg_mean_squared_error', cv=kf, verbose=1, n_jobs=-1)
+    grid_search.fit(X, y)
+
+    best_params = grid_search.best_params_
+    return best_params
+        
+def preprocess_dataset(df):  
+    dfnew = pd.DataFrame()
+    for col in CONFIG_MAP.keys():
+        dfnew[col] = df[col].map(CATECORY_MAP[col]).fillna(-1).astype(int)
+
+    if 'striping_factor' in CONFIG_MAP:
+        dfnew['striping_factor'] = df['striping_factor'].astype(int)
+    if 'cb_nodes' in CONFIG_MAP:
+        dfnew['cb_nodes'] = df['cb_nodes'].astype(int)
     
-    sampler_desc, sampler_class = SAMPLER_MAP[sampler_name]
-    logging.info(f"Running with {sampler_desc}")
-    
-    return sampler_class() if sampler_name != "grid" else sampler_class(config_space)
+    dfnew["runtime"] = df["runtime"]
+    X = dfnew.loc[:, (dfnew.columns != "runtime")].to_numpy()
+    y = dfnew["runtime"].to_numpy()
+    return X, y
 
 
-def smape(y_true, y_pred):
-    numerator = np.abs(y_true - y_pred)
-    denominator = (np.abs(y_true) + np.abs(y_pred)) / 2
-    smape_value = np.mean(numerator / denominator) * 100
+def split_train_test(df):
+    # make sure to remove overlapping values
+    df["config"] = df.loc[:, df.columns != "runtime"].astype(str).agg('-'.join, axis=1)
+    train_conf, test_conf = train_test_split(
+        df["config"].unique(), random_state=123, test_size=0.25, shuffle=True
+    )
+    train = df.loc[df["config"].isin(train_conf)]
+    test = df.loc[df["config"].isin(test_conf)]
+
+    train = train.drop("config", axis=1)
+    test = test.drop("config", axis=1)
+
+    X_train, y_train = preprocess_dataset(train)
+    X_test, y_test = preprocess_dataset(test)
+
+    return X_train, X_test, y_train, y_test
+
+
+def test_model(df, best_params, algo):
+
+    X_train, X_test, y_train, y_test = split_train_test(df)
+    match algo:
+        case "rf":
+            model = RandomForestRegressor(**best_params, random_state=42)
+        case "dt":
+            model = DecisionTreeRegressor(**best_params, random_state=42)
+        case _:
+            model = xgb.XGBRegressor(**best_params, random_state=42)
+
+    model.fit(X_train, y_train)
+
+    y_pred = model.predict(X_test)
+
+    smape_value = smape(y_test, y_pred)
+    print(f"SMAPE: {smape_value:.2f}%")
     return smape_value
 
-def predict_instance(model, category_mappings, instance):
+
+
+
+def predictallcombinations(model):
+
+    combinations = list(
+        itertools.product(
+            CONFIG_MAP.items()
+        )
+    )
+
+    # Create a Pandas DataFrame
+    dfall = pd.DataFrame(
+        combinations,
+        columns=[
+            CONFIG_MAP.keys()
+        ],
+    )
+    df = pd.DataFrame()
+    for col in CONFIG_MAP.keys():
+        df[col] = dfall[col].map(CATECORY_MAP[col]).fillna(-1).astype(int)
+
+    if 'striping_factor' in CONFIG_MAP:
+        df['striping_factor'] = dfall['striping_factor'].astype(int)
+    if 'cb_nodes' in CONFIG_MAP:
+        df['cb_nodes'] = dfall['cb_nodes'].astype(int)
     
-    for col, mapping in category_mappings.items():
+    
+    X = df.loc[:, :].to_numpy()
+    
+    y_hat = model.predict(X)
+
+    df["pred-time"] = y_hat
+    df.to_csv("predicted.csv")
+
+def predict_instance(model, instance):
+    
+    for col, mapping in CATECORY_MAP.items():
         instance[col] = mapping.get(instance[col], -1)
 
     instance_df = pd.DataFrame([instance])
     prediction = model.predict(instance_df)[0]
     return prediction
 
-def eval_func(model, category_mappings, trial):
-    
-    dir_path = os.environ.get("PWD", os.getcwd())
-    config_path = os.path.join(dir_path, "config.conf" if ioflexset else "romio-hints")
-    with open(config_path, "w") as config_file:
-        sample_instance = {}
-        config_entries = {
-            "striping_factor": striping_factor,
-            "striping_unit": striping_unit,
-            "cb_nodes": cb_nodes,
-            "romio_filesystem_type": romio_fs_type,
-            "romio_ds_read": romio_ds_read,
-            "romio_ds_write": romio_ds_write,
-            "romio_cb_read": romio_cb_read,
-            "romio_cb_write": romio_cb_write,
-            "cb_config_list": cb_config_list
-        }
-
-        configs_str = ""
-        for key, values in config_entries.items():
-            if values:
-                selected_val = trial.suggest_categorical(key, values)
-                if ioflexset:
-                    config_file.write(f"{key} = {selected_val}\n")
-                else:
-                    config_file.write(f"{key} {selected_val}\n")
-                    
-                configs_str += str(selected_val) + ","
-                sample_instance[key] = selected_val
-                if key == "striping_unit":
-                    config_file.write(f"cb_buffer_size = {selected_val}\n")
-                if key == "romio_filesystem_type":
-                    os.environ["ROMIO_FSTYPE_FORCE"] = selected_val
-    
-    # Use ROMIO HINTS if IOFLex is not enabled
-    if not ioflexset:
-        os.environ["ROMIO_HINTS"] = config_path
-
-    # start application
-    starttime = time.time()
-    q = subprocess.Popen(
-        shlex.split(run_app), stdout=subprocess.PIPE, shell=False, cwd=os.getcwd()
+def ioflextrain():
+    # printheader()
+    ap = argparse.ArgumentParser(add_help=True)
+    ap.add_argument(
+        "--algo",
+        type=str,
+        default="xgb",
+        help="Machine Learning Algorithm",
+        choices=["xgb", "rf", "dt"],
     )
-    out, err = q.communicate()
-    elapsedtime = time.time() - starttime
-    
-    predtime = predict_instance(model, category_mappings, sample_instance)
-    outline = f"{configs_str}{elapsedtime},{predtime}\n"
-    outfile.write(outline)
+    ap.add_argument(
+        "--outmodelfile",
+        type=str,
+        help="Filename to save the pickeled  model",
+        default="model.pkl",
+    )
+    ap.add_argument(
+        "--dataset", type=str, help="Path to the training dataset", required=True
+    )
+    ap.add_argument(
+        "--ntrials",
+        type=int,
+        default=50,
+        help="Number of trials to run hyperparametertuning",
+    )
+    parse = ap.parse_args()
+    args = vars(parse)
 
-    if logisset:
-        logfile_o.write(f"Config: {configs_str}\n\n{out.decode()}\n")
-        logfile_e.write(f"Config: {configs_str}\n\n{err.decode()}\n")
+    algo = args["algo"]
+    dataset = args["dataset"]
+    outmodelfile = args["outmodelfile"]
+    ntrials = args["ntrials"]
 
-    for f in files_to_clean:
-        if os.path.exists(f):
-            os.remove(f) if os.path.isfile(f) else rmtree(f)
-            
-    print("Running config: " + outline)
-    return elapsedtime
-
-
-configs_space = {}
-
-def ioflexpredict():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--ioflex", action="store_true", default=False, help="IOFlex is enabled")
-    ap.add_argument("--outfile", type=str, default="./OutIOFlexOptuna.csv", help="Path to output CSV file")
-    ap.add_argument("--inoptuna", type=str, default=None, help="Optuna study pickled file from previous runs")
-    ap.add_argument("--outoptuna", "-o", type=str, default="./optuna_study.pkl", help="Optuna study output pkl file")
-    ap.add_argument("--cmd", "-c", type=str, required=True, nargs="*", help="Application command line")
-    ap.add_argument("--max_trials", type=int, default=50, help="Max number of trials")
-    ap.add_argument("--sampler", type=str, choices=["tpe", "rand", "gp", "nsga", "brute", "grid", "auto"], default="tpe", help="Sampler used by Optuna")
-    ap.add_argument("--model", type=str, required=True, help="Path to the trained model")
-    ap.add_argument("--with_log_path", type=str, default=None, help="Path for logging application output")
-    ap.add_argument("--cat_mapping", type=str, required=True, help="Input category mappings")
-    args = vars(ap.parse_args())
-    
-    global ioflexset, run_app, outfile, logisset, logfile_o, logfile_e
-    ioflexset = args["ioflex"]
-    run_app = " ".join(args["cmd"])
-    outfile = open(args["outfile"], "w")
-    
-    category_mappings = joblib.load(args["cat_mapping"])
-    model = joblib.load(args["model"])
-    
-    logisset = bool(args["with_log_path"])
-    if logisset:
-        os.makedirs(args["with_log_path"], exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H.%M.%S")
-        logfile_o = open(os.path.join(args["with_log_path"], f"out.{timestamp}"), "w")
-        logfile_e = open(os.path.join(args["with_log_path"], f"err.{timestamp}"), "w")
-    
-    print("Starting Optuna Tuning")
+    df = pd.read_csv(dataset)
 
     
-    config_space = {}
-    header_items = []
+    # Train Model
+    X, y = preprocess_dataset(df)
+    match algo:
+        case "rf":
+            best_params = random_forest_regression_optuna(X, y, ntrials)
+            test_model(df, best_params, algo)
+            model = RandomForestRegressor(**best_params, random_state=42)
+        case "dt":
+            best_params = dt_regression_optuna(X, y, ntrials)
+            test_model(df, best_params, algo)
+            model = DecisionTreeRegressor(**best_params, random_state=42)
+        case _:
+            # best_params = xgb_regression_optuna(X, y, ntrials)
+            best_params = xgb_regression_gridsearch(X, y)
+            test_model(df, best_params, algo)
+            model = xgb.XGBRegressor(**best_params, random_state=42)
 
-    params = {
-        "striping_factor": striping_factor,
-        "striping_unit": striping_unit,
-        "cb_nodes": cb_nodes,
-        "romio_filesystem_type": romio_fs_type,
-        "romio_ds_read": romio_ds_read,
-        "romio_ds_write": romio_ds_write,
-        "romio_cb_read": romio_cb_read,
-        "romio_cb_write": romio_cb_write,
-        "cb_config_list": cb_config_list,
-    }
-    # Populate config_space and header list
-    for key, value in params.items():
-        if value:  # Avoids unnecessary len() calls
-            config_space[key] = value
-            header_items.append(key)
-    header_items.append("elapsedtime")
+    model.fit(X, y)
 
-    header_str = ",".join(header_items)
-    outfile.write(header_str)
+    # Pickle and save file
+    joblib.dump(model, outmodelfile)
     
-    sampler = get_sampler(args["sampler"], config_space)
-    
-    if args["inoptuna"]:
-        study = joblib.load(args["inoptuna"])
-    else:
-        study = optuna.create_study(direction="minimize", sampler=sampler, study_name="ioflexoptuna_study")
-    
-    study.optimize(lambda trial: eval_func(trial, model, category_mappings), n_trials=args["max_trials"])
-    
-    print("Best trial:", study.best_trial)
-    joblib.dump(study, args["outoptuna"])
-    
-    outfile.close()
-    if logisset:
-        logfile_o.close()
-        logfile_e.close()
+    #predictallcombinations(model)
 
 
 if __name__ == "__main__":
-    ioflexpredict()
+    header.printheader()
+    ioflextrain()

@@ -33,19 +33,26 @@
         }                                                                \
     }
 
-typedef struct mpi_configs
+typedef enum
 {
-    char romio_ds_read[MPI_MAX_INFO_VAL];
-    char romio_ds_write[MPI_MAX_INFO_VAL];
-    char romio_cb_read[MPI_MAX_INFO_VAL];
-    char romio_cb_write[MPI_MAX_INFO_VAL];
-    char romio_filesystem_type[MPI_MAX_INFO_VAL];
-    char cb_config_list[MPI_MAX_INFO_VAL];
-    char striping_unit[MPI_MAX_INFO_VAL];
-    char striping_factor[MPI_MAX_INFO_VAL];
-    char cb_nodes[MPI_MAX_INFO_VAL];
-    char cb_buffer_size[MPI_MAX_INFO_VAL];
-} mpi_configs;
+    ROMIO_DS_READ,
+    ROMIO_DS_WRITE,
+    ROMIO_CB_READ,
+    ROMIO_CB_WRITE,
+    ROMIO_FS_TYPE,
+    CB_CONFIG_LIST,
+    STRIPING_UNIT,
+    STRIPING_FACTOR,
+    CB_NODES,
+    CB_BUFFER_SIZE,
+    ROMIO_NO_INDEP_RW,
+    IND_RD_BUFFER_SIZE,
+    IND_WR_BUFFER_SIZE,
+    CONFIG_FIELD_COUNT
+
+} mpi_config_field;
+
+extern char mpi_configs[CONFIG_FIELD_COUNT][MPI_MAX_INFO_VAL];
 
 void set_mpi_info_config(MPI_Info info);
 

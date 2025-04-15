@@ -18,11 +18,12 @@ parent_dir_path = os.path.abspath(os.path.join(dir_path, os.pardir))
 sys.path.insert(0, parent_dir_path)
 from ioflexpredict import ioflexpredict
 from ioflexheader import SAMPLER_MAP, PRUNER_MAP, CONFIG_MAP as config
+from ioflexsetstriping import setstriping
 from utils import header
 
 
 # Application Specific
-files_to_clean = []
+files_to_stripe = []
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -52,6 +53,8 @@ def eval_func(trial, model=None):
     dir_path = os.environ.get("PWD", os.getcwd())
     config_path = os.path.join(dir_path, "config.conf" if ioflexset else "romio-hints")
 
+    stripe_count = 8
+    stripe_size = "1M"
     with open(config_path, "w") as config_file:
         sample_instance = {}
         configs_str = ""
@@ -68,8 +71,11 @@ def eval_func(trial, model=None):
             separator = " = " if ioflexset else " "
             config_file.write(f"{key}{separator}{selected_val}\n")
 
+            if key == "striping_factor":
+                stripe_count = int(selected_val)
             # Special handling for specific keys
             if key == "striping_unit":
+                stripe_size = (str(selected_val // 1048576) + "M")
                 config_file.write(f"cb_buffer_size{separator}{selected_val}\n")
             elif key == "romio_filesystem_type":
                 os.environ.update({"ROMIO_FSTYPE_FORCE": selected_val})
@@ -78,7 +84,14 @@ def eval_func(trial, model=None):
     # Use ROMIO HINTS if IOFLex is not enabled
     if not ioflexset:
         os.environ["ROMIO_HINTS"] = config_path
+    else:
+        os.environ["IOFLEX_HINTS"] = config_path
 
+    for f in files_to_stripe:
+        setstriping(f, stripe_count, stripe_size)
+        # if os.path.exists(f):
+        #     os.remove(f) if os.path.isfile(f) else rmtree(f)
+            
     start_time = time.time()
     process = subprocess.Popen(shlex.split(run_app), stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False, cwd=os.getcwd())
     out, err = process.communicate()
@@ -96,9 +109,9 @@ def eval_func(trial, model=None):
         logfile_o.write(f"Config: {configs_str}\n\n{out.decode()}\n")
         logfile_e.write(f"Config: {configs_str}\n\n{err.decode()}\n")
     
-    for f in files_to_clean:
-        if os.path.exists(f):
-            os.remove(f) if os.path.isfile(f) else rmtree(f)
+    # for f in files_to_clean:
+    #     if os.path.exists(f):
+    #         os.remove(f) if os.path.isfile(f) else rmtree(f)
     
     logger.info(f"Running config: {outline}")
     

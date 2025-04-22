@@ -16,12 +16,15 @@ parent_dir_path = os.path.abspath(os.path.join(dir_path, os.pardir))
 sys.path.insert(0, parent_dir_path)
 from ioflexpredict import ioflexpredict
 from ioflexheader import CONFIG_MAP
+from ioflexsetstriping import setstriping
 from utils import header 
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+#Application Specific
+files_to_stripe = []
 files_to_clean = []
 
 def eval_func(params, model):
@@ -41,23 +44,37 @@ def eval_func(params, model):
             separator = " = " if ioflexset else " "
             sample_instance[key] = selected_val
             print(sample_instance)
-            config_file.write(f"{key}{separator}{selected_val}\n")
+            
             configs_list.append(str(selected_val))
-
-            if key == "striping_unit":
-                config_file.write(f"cb_buffer_size{separator}{selected_val}\n")
-            elif key == "romio_filesystem_type":
-                os.environ["ROMIO_FSTYPE_FORCE"] = selected_val 
-
+            # Special handling for specific keys
+            match key:
+                case "striping_factor":
+                    stripe_count = int(selected_val) 
+                case "striping_unit":
+                        stripe_size = (str(selected_val // 1048576) + "M")
+                        config_file.write(f"cb_buffer_size{separator}{selected_val}\n")
+                case "romio_filesystem_type":
+                    os.environ["ROMIO_FSTYPE_FORCE"] = selected_val
+                case "cb_config_list":
+                    if ioflexset:
+                        config_file.write(f"{key}{separator}\"{selected_val}\"\n")
+                    continue
+            config_file.write(f"{key}{separator}{selected_val}\n")
+            
     configs_str = ",".join(configs_list)
     if not ioflexset:
         os.environ["ROMIO_HINTS"] = config_path
+    else:
+        os.environ["IOFLEX_HINTS"] = config_path
 
     start_time = time.time()
     process = subprocess.Popen(shlex.split(run_app), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = process.communicate()
     elapsedtime = time.time() - start_time
-    
+    # set striping with lfs setstripe
+    for f in files_to_stripe:
+        setstriping(f, stripe_count, stripe_size)
+
     if model:
         predtime = ioflexpredict.predict_instance(model, sample_instance)
         outline = f"{configs_str},{elapsedtime},{predtime}\n"

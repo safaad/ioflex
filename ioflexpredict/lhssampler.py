@@ -18,7 +18,7 @@ parent_dir_path = os.path.abspath(os.path.join(dir_path, os.pardir))
 sys.path.insert(0, parent_dir_path)
 from ioflexheader import CONFIG_MAP
 from utils import header
-from collections import defaultdict
+from ioflexsetstriping import setstriping
 
 def configure_logging():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -27,6 +27,7 @@ def configure_logging():
 logger = configure_logging()
 
 files_to_clean = []
+files_to_stripe = []
 
 def generate_lhs_samples(param_grid, nsamples):
     n_dims = len(param_grid)
@@ -96,18 +97,32 @@ def main():
                 selected_val = solution[list(k for k in CONFIG_MAP.keys() if CONFIG_MAP[k]).index(key)]
                 separator = " = " if ioflexset else " "
                 
-                config_file.write(f"{key}{separator}{selected_val}\n")
                 config_entries.append(str(selected_val))
                 iodict[key].append(selected_val)
                 
-                if key == "striping_unit":
-                    config_file.write(f"cb_buffer_size{separator}{selected_val}\n")
-                elif key == "romio_filesystem_type":
-                    os.environ["ROMIO_FSTYPE_FORCE"] = selected_val 
+                match key:
+                    case "striping_factor":
+                        stripe_count = int(selected_val)
+                    case "striping_unit":
+                        stripe_size = (str(selected_val // 1048576) + "M")
+                        config_file.write(f"cb_buffer_size{separator}{selected_val}\n")
+                    case "romio_filesystem_type":
+                        os.environ.update({"ROMIO_FSTYPE_FORCE": selected_val})
+                    case "cb_config_list":
+                        if ioflexset:
+                            config_file.write(f"{key}{separator}\"{selected_val}\"\n")
+                            continue
+                config_file.write(f"{key}{separator}{selected_val}\n")
 
         configs_str = ",".join(config_entries)
         if not ioflexset:
             os.environ["ROMIO_HINTS"] = config_path
+        else:
+            os.environ["IOFLEX_HINTS"] = config_path        
+        
+        # Set striping with lfs setstripe
+        for f in files_to_stripe:
+            setstriping(f, stripe_count, stripe_size)
         
         starttime = time.time()
         process = subprocess.Popen(shlex.split(run_app), stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False, cwd=os.getcwd())

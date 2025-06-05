@@ -20,7 +20,7 @@ PRUNER_MAP = {
 }
 
 # IO CONFIGURATIONS Parameters Space
-CONFIG_MAP = {
+CONFIG_ROMIO_MAP = {
     "romio_filesystem_type": [], #["LUSTRE:", "UFS:"],
     "romio_ds_read": ["automatic", "enable", "disable"] ,
     "romio_ds_write": ["automatic", "enable", "disable"],
@@ -33,12 +33,49 @@ CONFIG_MAP = {
     "romio_no_indep_rw": ["true", "false"]
 }
 
+CONFIG_CRAY_MAP = {
+    "romio_filesystem_type": ["CRAY-ADIO:", "UFS:"],
+    "romio_ds_read": ["automatic", "enable", "disable"] ,
+    "romio_ds_write": ["automatic", "enable", "disable"],
+    "romio_cb_read": ["automatic", "enable", "disable"],
+    "romio_cb_write": ["automatic", "enable", "disable"],
+    "striping_factor": [4, 8, 16, 24, 32, 40, 48, 64, -1],
+    "striping_unit": [1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728],
+    "cb_nodes": [1, 2, 4, 8, 16, 24, 32, 48, 64, 128],
+    "cb_config_list": ["*:1", "*:*"],
+    "cray_cb_nodes_multiplier": [],
+    "cray_cb_write_lock_mode": [0, 1, 2],
+    "direct_io": ["true", "false"],
+    "aggregator_placement_stride": [],
+    "romio_no_indep_rw": ["true", "false"]
+}
+
+CONFIG_OMPIO_MAP = {
+    # TODO
+    "striping_unit": [1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728],
+}
+
+
+# CATECORY_MAP = {
+#     feature: {category: idx for idx, category in enumerate(values)}
+#     for feature, values in CONFIG_MAP.items()
+# }
+def get_config_map(hints):
+    CONFIG_MAP = {
+        "cray": CONFIG_CRAY_MAP,
+        "ompio": CONFIG_OMPIO_MAP,
+        "romio": CONFIG_ROMIO_MAP,
+    }.get(
+        hints, CONFIG_ROMIO_MAP
+    )  # Use ROMIO as default fallback
+    return CONFIG_MAP
 
 ## Prediction Specific
-CATECORY_MAP = {
-    feature: {category: idx for idx, category in enumerate(values)}
-    for feature, values in CONFIG_MAP.items()
-}
+def build_category_map(config_map):
+    return {
+        feature: {category: idx for idx, category in enumerate(values)}
+        for feature, values in config_map.items()
+    }
 
 
 def smape(y_true, y_pred):

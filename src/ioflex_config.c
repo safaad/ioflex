@@ -6,6 +6,7 @@ bool MPI_CONFIG_IS_INITIALIZED = false;
 
 char mpi_configs[CONFIG_FIELD_COUNT][MPI_MAX_INFO_VAL];
 
+#ifdef HINTS_ROMIO
 cfg_opt_t opts[] = {
     CFG_STR("romio_ds_read", 0, CFGF_NONE),
     CFG_STR("romio_ds_write", 0, CFGF_NONE),
@@ -21,6 +22,33 @@ cfg_opt_t opts[] = {
     CFG_STR("ind_rd_buffer_size", 0, CFGF_NONE),
     CFG_STR("ind_wr_buffer_size", 0, CFGF_NONE),
     CFG_END()};
+#elif defined(HINTS_CRAY)
+cfg_opt_t opts[] = {
+    CFG_STR("romio_ds_read", 0, CFGF_NONE),
+    CFG_STR("romio_ds_write", 0, CFGF_NONE),
+    CFG_STR("romio_cb_read", 0, CFGF_NONE),
+    CFG_STR("romio_cb_write", 0, CFGF_NONE),
+    CFG_STR("romio_filesystem_type", 0, CFGF_NONE),
+    CFG_STR("cb_config_list", 0, CFGF_NONE),
+    CFG_STR("striping_unit", 0, CFGF_NONE),
+    CFG_STR("striping_factor", 0, CFGF_NONE),
+    CFG_STR("cb_nodes", 0, CFGF_NONE),
+    CFG_STR("cb_buffer_size", 0, CFGF_NONE),
+    CFG_STR("cb_align", 0, CFGF_NONE),
+    CFG_STR("cray_cb_nodes_multiplier", 0, CFGF_NONE),
+    CFG_STR("cray_cb_write_lock_mode", 0, CFGF_NONE),
+    CFG_STR("direct_io", 0, CFGF_NONE),
+    CFG_STR("aggregator_placement_stride", 0, CFGF_NONE),
+    CFG_STR("romio_no_indep_rw", 0, CFGF_NONE),
+    CFG_STR("ind_rd_buffer_size", 0, CFGF_NONE),
+    CFG_STR("ind_wr_buffer_size", 0, CFGF_NONE),
+    CFG_END()};
+#elif defined(HINTS_OMPIO)
+//TODO
+cfg_opt_t opts[] = {
+    CFG_STR("romio_ds_read", 0, CFGF_NONE),
+    CFG_END()};
+#endif
 
 void get_mpi_config()
 {

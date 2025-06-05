@@ -33,6 +33,7 @@
         }                                                                \
     }
 
+#ifdef HINTS_ROMIO
 typedef enum
 {
     ROMIO_DS_READ,
@@ -51,6 +52,37 @@ typedef enum
     CONFIG_FIELD_COUNT
 
 } mpi_config_field;
+#elif defined(HINTS_CRAY)
+typedef enum
+{
+    ROMIO_DS_READ,
+    ROMIO_DS_WRITE,
+    ROMIO_CB_READ,
+    ROMIO_CB_WRITE,
+    ROMIO_FS_TYPE,
+    CB_CONFIG_LIST,
+    STRIPING_UNIT,
+    STRIPING_FACTOR,
+    CB_NODES,
+    CB_BUFFER_SIZE,
+    CB_ALIGN,
+    CRAY_CB_NODES_MULTI,
+    CRAY_CB_WRITE_LOCK_MODE,
+    DIRECT_IO,
+    AGG_PLACEMENT_STRIDE,
+    ROMIO_NO_INDEP_RW,
+    IND_RD_BUFFER_SIZE,
+    IND_WR_BUFFER_SIZE,
+    CONFIG_FIELD_COUNT
+} mpi_config_field;
+#elif defined(HINTS_OMPIO)
+//TODO
+typedef enum
+{
+    CONFIG_FIELD_COUNT
+} mpi_config_field;
+
+#endif
 
 extern char mpi_configs[CONFIG_FIELD_COUNT][MPI_MAX_INFO_VAL];
 

@@ -12,7 +12,7 @@ AC_DEFINE_UNQUOTED(LIBIOFLEX_REVISION, ${version_revision}, [ioflex Revision])
 AC_SUBST(LIBIOFLEX_REVISION)
 
 
-AC_INIT([libioflex],[version_major.version_minor.version_revision],[safadiaby9@gmail.com])
+AC_INIT(libioflex,[version_major.version_minor.version_revision],safadiaby9@gmail.com)
 
 AC_LANG([C])
 AM_INIT_AUTOMAKE([subdir-objects])
@@ -25,33 +25,30 @@ AC_CONFIG_FILES([Makefile
 
 
 # MPI Implementation Mode
-# --with-hints=romio|craympich|ompio (default is romio)
-AC_ARG_WITH([hints],
-  AS_HELP_STRING([--with-hints=MODE], [Set mode: romio (default), cray-mpich, or ompio]),
-  [hints_val="$withval"],
-  [hints_val="romio"])  # Default is "a" if not specified
+AC_ARG_ENABLE([mode-romio],
+                AS_HELP_STRING([--enable-mode-romio], [Enable Mode ROMIO (default)]),
+                [mode_romio=yes], []
+)
 
-# Validate and define macros
-case "$hints_val" in
-  romio)
-    AC_DEFINE([HINTS_ROMIO], [1], [Define if using hints romio])
-    ;;
-  cray)
-    AC_DEFINE([HINTS_CRAY], [1], [Define if using hints cray])
-    ;;
-  ompio)
-    AC_DEFINE([HINTS_OMPIO], [1], [Define if using hints ompio])
-    ;;
-  *)
-    AC_MSG_ERROR([Invalid mode: $hints_val. Use --with-hints=romio,  --with-hints=ompio or --with-hints=cray])
-    ;;
-esac
+AC_ARG_ENABLE([mode-cray],
+                AS_HELP_STRING([--enable-mode-cray], [Enable Mode CRAY MPICH MPIIO HINTS]),
+                [mode_cray=yes], []
+)
 
+# Decide which mode to enable
+if test "x$mode_cray" = "xyes"; then
+  AC_DEFINE([MODE_CRAY], [1], [Enable Mode Cray MPICH MPIIO])
+elif test "x$mode_romio" = "xyes" || test -z "$mode_romio$mode_cray"; then
+  AC_DEFINE([MODE_ROMIO], [1], [Enable Mode ROMIO])
+else
+  AC_MSG_ERROR([Invalid mode configuration])
+fi
 
 
 # Check for libconfuse
 AC_ARG_WITH([libconfuse],
-            [AS_HELP_STRING([--with-libconfuse=DIR],[Use libconfuse library [default=yes]])],,
+            [AC_HELP_STRING([--with-libconfuse=DIR],
+                            [Use libconfuse library [default=yes]])],,
             [withval=yes])
 case "$withval" in
     yes)

@@ -16,9 +16,13 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 parent_dir_path = os.path.abspath(os.path.join(dir_path, os.pardir))
 sys.path.insert(0, parent_dir_path)
 from ioflexpredict import ioflexpredict
-from ioflexheader import get_config_map
+from ioflexheader import get_config_map, set_hints_with_ioflex, set_hints_env_romio, set_hints_env_cray
 from ioflexsetstriping import setstriping
 from utils import header
+
+# Application Specific
+files_to_stripe = []
+files_to_clean = []
 
 # Configure logging
 logging.basicConfig(
@@ -26,51 +30,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Application Specific
-files_to_stripe = []
-files_to_clean = []
-
 
 def eval_func(params, model):
 
     dir_path = os.getcwd()
     config_path = os.path.join(dir_path, "config.conf" if ioflexset else "romio-hints")
 
-    with open(config_path, "w") as config_file:
-        sample_instance = {}
-        configs_list = []
-
-        for key, values in CONFIG_MAP.items():
-            if not values:
-                continue
-
-            selected_val = params[key]
-            separator = " = " if ioflexset else " "
-            sample_instance[key] = selected_val
-            print(sample_instance)
-
-            configs_list.append(str(selected_val))
-            # Special handling for specific keys
-            match key:
-                case "striping_factor":
-                    stripe_count = int(selected_val)
-                case "striping_unit":
-                    stripe_size = str(selected_val // 1048576) + "M"
-                    config_file.write(f"cb_buffer_size{separator}{selected_val}\n")
-                case "romio_filesystem_type":
-                    os.environ["ROMIO_FSTYPE_FORCE"] = selected_val
-                case "cb_config_list":
-                    if ioflexset:
-                        config_file.write(f'{key}{separator}"{selected_val}"\n')
-                    continue
-            config_file.write(f"{key}{separator}{selected_val}\n")
-
-    configs_str = ",".join(configs_list)
-    if not ioflexset:
-        os.environ["ROMIO_HINTS"] = config_path
-    else:
+    if ioflexset:
+        set_hints_with_ioflex(params, config_path)
         os.environ["IOFLEX_HINTS"] = config_path
+    else:
+        if hints == "romio":
+            set_hints_env_romio(params, config_path)
+            os.environ["ROMIO_HINTS"] = config_path
+        if hints == "cray":
+            crayhints = set_hints_env_cray(params, config_path)
+            os.environ["MPICH_MPIIO_HINTS"] = crayhints
+        # if hints == "ompio":
+        #  TODO
 
+    configs_str = ",".join(map(str, params.values()))
+    
+    stripe_count = int(params["striping_factor"]) if "striping_factor" in params else 8
+    stripe_size = str(params["striping_unit"] // 1048576) + "M" if "striping_unit" in params else "1M"
+    
     start_time = time.time()
     process = subprocess.Popen(
         shlex.split(run_app), stdout=subprocess.PIPE, stderr=subprocess.PIPE
@@ -82,7 +65,7 @@ def eval_func(params, model):
         setstriping(f, stripe_count, stripe_size)
 
     if model:
-        predtime = ioflexpredict.predict_instance(model, sample_instance)
+        predtime = ioflexpredict.predict_instance(model, params)
         outline = f"{configs_str},{elapsedtime},{predtime}\n"
     else:
         outline = f"{configs_str},{elapsedtime}\n"
@@ -100,9 +83,6 @@ def eval_func(params, model):
     logger.info(f"Running config: {outline}")
 
     return elapsedtime
-
-
-configs_space = {}
 
 
 def ioflexhyperopt():
@@ -186,26 +166,21 @@ def ioflexhyperopt():
 
     print("Starting HyperOpt Tuning")
 
-    global CONFIG_MAP
+    global hints
     # Define configurations mappings
     hints = args["with_hints"]
     CONFIG_MAP = get_config_map(hints)
 
-    configs_space = {
-        key: hp.choice(key, values) for key, values in CONFIG_MAP.items() if values
-    }
-
-    header_items = []
-    for key, values in CONFIG_MAP.items():
-        if values:
-            header_items.append(key)
-
+    header_items = [key for key, values in sorted(CONFIG_MAP.items()) if values]
     header_items.append("elapsedtime")
     if args["with_model"]:
         header_items.append("predicttime")
 
-    header_str = ",".join(header_items) + "\n"
-    outfile.write(header_str)
+    outfile.write(",".join(header_items) + "\n")
+    
+    configs_space = {
+        key: hp.choice(key, values) for key, values in CONFIG_MAP.items() if values
+    }
 
     algo_dict = {
         "tpe": tpe.suggest,

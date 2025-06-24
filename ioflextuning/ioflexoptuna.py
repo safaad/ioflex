@@ -17,7 +17,8 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 parent_dir_path = os.path.abspath(os.path.join(dir_path, os.pardir))
 sys.path.insert(0, parent_dir_path)
 from ioflexpredict import ioflexpredict
-from ioflexheader import SAMPLER_MAP, PRUNER_MAP, CONFIG_ROMIO_MAP, get_config_map
+from ioflexheader import SAMPLER_MAP, PRUNER_MAP
+from ioflexheader import get_config_map, set_hints_with_ioflex, set_hints_env_romio, set_hints_env_cray
 from ioflexsetstriping import setstriping
 from utils import header
 
@@ -55,56 +56,42 @@ def get_pruner(pruner_name):
     logging.info(f"Using {pruner_name} pruner.")
     return PRUNER_MAP[pruner_name]()
 
-
+# Default ROMIO Configuration
 def eval_func(
     trial,
-    config=CONFIG_ROMIO_MAP,
+    config=get_config_map("romio"),
     model=None,
 ):
 
     dir_path = os.environ.get("PWD", os.getcwd())
 
     config_path = os.path.join(dir_path, "config.conf" if ioflexset else "romio-hints")
-
-    stripe_count = 8
-    stripe_size = "1M"
-    with open(config_path, "w") as config_file:
-        sample_instance = {}
-        configs_str = ""
-        configs_list = []
-
-        for key, values in config.items():
-            if not values:
-                continue
-
-            selected_val = trial.suggest_categorical(key, values)
-            sample_instance[key] = selected_val
-            configs_list.append(str(selected_val))
-
-            separator = " = " if ioflexset else " "
-
-            # Special handling for specific keys
-            match key:
-                case "striping_factor":
-                    stripe_count = int(selected_val)
-                case "striping_unit":
-                    stripe_size = str(selected_val // 1048576) + "M"
-                    config_file.write(f"cb_buffer_size{separator}{selected_val}\n")
-                case "romio_filesystem_type":
-                    os.environ.update({"ROMIO_FSTYPE_FORCE": selected_val})
-                case "cb_config_list":
-                    if ioflexset:
-                        config_file.write(f'{key}{separator}"{selected_val}"\n')
-                        continue
-            config_file.write(f"{key}{separator}{selected_val}\n")
-
-    configs_str = ",".join(configs_list)
-    # Use ROMIO HINTS if IOFLex is not enabled
-    if not ioflexset:
-        os.environ["ROMIO_HINTS"] = config_path
-    else:
+    
+    sample_instance = {}
+    for key, values in config.items():
+        if not values:
+            continue
+        selected_val = trial.suggest_categorical(key, values)
+        sample_instance[key] = selected_val
+    
+    if ioflexset:
+        set_hints_with_ioflex(sample_instance, config_path)
         os.environ["IOFLEX_HINTS"] = config_path
+    else:
+        if hints == "romio":
+            set_hints_env_romio(sample_instance, config_path)
+            os.environ["ROMIO_HINTS"] = config_path
+        if hints == "cray":
+            crayhints = set_hints_env_cray(sample_instance, config_path)
+            os.environ["MPICH_MPIIO_HINTS"] = crayhints
+        # if hints == "ompio":
+        #  TODO
+    
+    
+    configs_str = ",".join(map(str, sample_instance.values()))
 
+    stripe_count = int(sample_instance["striping_factor"]) if "striping_factor" in sample_instance else 8
+    stripe_size = str(sample_instance["striping_unit"] // 1048576) + "M" if "striping_unit" in sample_instance else "1M"
     # Set striping with lfs setstripe
     for f in files_to_stripe:
         setstriping(f, stripe_count, stripe_size)
@@ -200,7 +187,7 @@ def ioflexoptuna():
     )
     args = vars(ap.parse_args())
 
-    global ioflexset, run_app, outfile, logisset, logfile_o, logfile_e
+    global ioflexset, run_app, outfile, logisset, logfile_o, logfile_e, hints
     ioflexset = args["ioflex"]
     run_app = " ".join(args["cmd"])
     outfile = open(args["outfile"], "w")
@@ -214,23 +201,20 @@ def ioflexoptuna():
         logfile_o = open(os.path.join(args["with_log_path"], f"out.{timestamp}"), "w")
         logfile_e = open(os.path.join(args["with_log_path"], f"err.{timestamp}"), "w")
 
-    # Define configurations mappings
+    # Define configurations mappings    
     hints = args["with_hints"]
+    
     CONFIG_MAP = get_config_map(hints)
-    config_space = {}
-    header_items = []
-    # Populate config_space and header list
-    for key, value in CONFIG_MAP.items():
-        if value:
-            config_space[key] = value
-            header_items.append(key)
+    config_space = {
+        key: value for key, value in sorted(CONFIG_MAP.items()) if value
+    }
+    header_items = list(config_space.keys())
 
     header_items.append("elapsedtime")
     if args["with_model"]:
         header_items.append("predicttime")
 
-    header_str = ",".join(header_items) + "\n"
-    outfile.write(header_str)
+    outfile.write(",".join(header_items) + "\n")
 
     sampler = get_sampler(args["sampler"], config_space)
     pruner = get_pruner(args["pruner"])

@@ -1,3 +1,4 @@
+import os
 import optuna
 import numpy as np
 
@@ -55,11 +56,6 @@ CONFIG_OMPIO_MAP = {
     "striping_unit": [1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728],
 }
 
-
-# CATECORY_MAP = {
-#     feature: {category: idx for idx, category in enumerate(values)}
-#     for feature, values in CONFIG_MAP.items()
-# }
 def get_config_map(hints):
     CONFIG_MAP = {
         "cray": CONFIG_CRAY_MAP,
@@ -83,3 +79,51 @@ def smape(y_true, y_pred):
     denominator = (np.abs(y_true) + np.abs(y_pred)) / 2
     smape_value = np.mean(numerator / denominator) * 100
     return smape_value
+
+def set_hints_with_ioflex(config_dict, config_path):
+    
+    with open(config_path, "w") as config_file:
+        separator = " = "
+        # Special handling of some keys
+        for key, val in config_dict.items():
+            match key:
+                case "striping_unit":
+                    config_file.write(f"cb_buffer_size{separator}{val}\n")
+                case "romio_filesystem_type":
+                    os.environ.update({"ROMIO_FSTYPE_FORCE": val})
+                case "cb_config_list":
+                    config_file.write(f'{key}{separator}"{val}"\n')
+                    continue
+            config_file.write(f"{key}{separator}{val}\n")
+
+def set_hints_env_romio(config_dict, config_path):
+    with open(config_path, "w") as config_file:
+        separator = " "
+        # Special handling of some keys
+        for key, val in config_dict.items():
+            match key:
+                case "striping_unit":
+                    config_file.write(f"cb_buffer_size{separator}{val}\n")
+                case "romio_filesystem_type":
+                    os.environ.update({"ROMIO_FSTYPE_FORCE": val})
+                    
+            config_file.write(f"{key}{separator}{val}\n")
+            
+def set_hints_env_cray(config_dict, config_path):
+    
+    # For all files to be adjusted
+    crayhints = ["*"]
+    separator = "="
+    
+    for key, val in config_dict.items():
+        if key == "cb_config_list":
+            crayhints.append(f"#{key}{separator}{val}#")
+        else:
+            if key == "striping_unit":
+                crayhints.append(f"cb_buffer_size{separator}{val}")
+            crayhints.append(f"{key}{separator}{val}")
+    
+    return ':'.join(map(str, crayhints))
+
+    
+    

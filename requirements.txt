@@ -1,0 +1,10 @@
+darshan==3.4.7.0
+hyperopt==0.2.7
+joblib==1.4.2
+numpy==2.3.1
+optuna==4.3.0
+pandas==2.3.0
+scikit_learn==1.7.0
+scipy==1.16.0
+tqdm==4.67.1
+xgboost==3.0.2

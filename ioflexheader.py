@@ -117,10 +117,12 @@ def set_hints_env_cray(config_dict, config_path):
     
     for key, val in config_dict.items():
         if key == "cb_config_list":
-            crayhints.append(f"#{key}{separator}{val}#")
+            crayhints.append(f"{key}{separator}#{val}#")
         else:
             if key == "striping_unit":
                 crayhints.append(f"cb_buffer_size{separator}{val}")
+            if key == "romio_filesystem_type":
+                os.environ.update({"ROMIO_FSTYPE_FORCE": val})
             crayhints.append(f"{key}{separator}{val}")
     
     return ':'.join(map(str, crayhints))

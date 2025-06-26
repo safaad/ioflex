@@ -35,7 +35,7 @@ CONFIG_ROMIO_MAP = {
 }
 
 CONFIG_CRAY_MAP = {
-    "romio_filesystem_type": ["CRAY-ADIO:", "UFS:"],
+    "romio_filesystem_type": [],
     "romio_ds_read": ["automatic", "enable", "disable"] ,
     "romio_ds_write": ["automatic", "enable", "disable"],
     "romio_cb_read": ["automatic", "enable", "disable"],
@@ -123,7 +123,8 @@ def set_hints_env_cray(config_dict, config_path):
                 crayhints.append(f"cb_buffer_size{separator}{val}")
             if key == "romio_filesystem_type":
                 os.environ.update({"ROMIO_FSTYPE_FORCE": val})
-            crayhints.append(f"{key}{separator}{val}")
+            else:
+                crayhints.append(f"{key}{separator}{val}")
     
     return ':'.join(map(str, crayhints))
 

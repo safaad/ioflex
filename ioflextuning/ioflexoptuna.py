@@ -18,10 +18,10 @@ parent_dir_path = os.path.abspath(os.path.join(dir_path, os.pardir))
 sys.path.insert(0, parent_dir_path)
 from ioflexpredict import ioflexpredict
 from ioflexheader import SAMPLER_MAP, PRUNER_MAP
-from ioflexheader import get_config_map, set_hints_with_ioflex, set_hints_env_romio, set_hints_env_cray
+from ioflexheader import get_config_map, set_hints_with_ioflex, set_hints_env_romio, set_hints_env_cray, are_cray_hints_valid
 from ioflexsetstriping import setstriping
 from utils import header
-
+from optuna.exceptions import TrialPruned
 
 # Application Specific
 files_to_stripe = []
@@ -74,6 +74,11 @@ def eval_func(
         selected_val = trial.suggest_categorical(key, values)
         sample_instance[key] = selected_val
     
+    if hints == "cray":
+        # if options are not valid skip the trial
+        if not are_cray_hints_valid(sample_instance, num_ranks, num_nodes):
+            raise TrialPruned()
+        
     if ioflexset:
         set_hints_with_ioflex(sample_instance, config_path)
         os.environ["IOFLEX_HINTS"] = config_path
@@ -150,6 +155,20 @@ def ioflexoptuna():
         help="Path to Optuna Study output",
     )
     ap.add_argument(
+        "--num_ranks",
+        "-np",
+        type=int,
+        required=True,
+        help="Number of ranks used to run the program"
+    )
+    ap.add_argument(
+        "--num_nodes",
+        "-n",
+        type=int,
+        required=True,
+        help="Number of nodes allocated"
+    )
+    ap.add_argument(
         "--cmd",
         "-c",
         type=str,
@@ -192,6 +211,10 @@ def ioflexoptuna():
     run_app = " ".join(args["cmd"])
     outfile = open(args["outfile"], "w")
 
+    global num_ranks, num_nodes
+    num_ranks = args["num_ranks"]
+    num_nodes = args["num_nodes"]
+    
     model = joblib.load(args["with_model"]) if args["with_model"] else None
 
     logisset = bool(args["with_log_path"])

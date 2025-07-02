@@ -45,7 +45,7 @@ CONFIG_CRAY_MAP = {
     ## doesn't make in sense in cray-mpich as it's  multiplier*striping_factor
     # "cb_nodes": [1, 2, 4, 8, 16, 24, 32, 48, 64, 128],
     "cb_config_list": ["*:1", "*:*"],
-    "cray_cb_nodes_multiplier": [1],
+    "cray_cb_nodes_multiplier": [1, 2],
     "cray_cb_write_lock_mode": [0, 1, 2],
     "direct_io": ["true", "false"],
     "aggregator_placement_stride": [],
@@ -156,11 +156,13 @@ def are_cray_hints_valid(config_dict, num_ranks, num_nodes):
     
     if "cb_config_list" in keys and "striping_factor" in keys:
         
-        cb_ppn = int(config_dict["cb_config_list"].split(":")[1])
+        cb_ppn = int(config_dict["cb_config_list"].split(":")[1]) if config_dict["cb_config_list"].split(":")[1] != "*" else num_ranks//num_nodes
+        
         cb_nodes = config_dict["striping_factor"] * cb_multi
         
         if min(cb_nodes, cb_ppn*num_nodes) > num_ranks:
             return False
     
     return True
-        
+
+

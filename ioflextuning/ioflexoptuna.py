@@ -33,7 +33,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
 def get_sampler(sampler_name, config_space=None):
 
     if sampler_name not in SAMPLER_MAP:

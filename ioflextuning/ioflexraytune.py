@@ -10,8 +10,7 @@ import joblib
 dir_path = os.path.dirname(os.path.realpath(__file__))
 parent_dir_path = os.path.abspath(os.path.join(dir_path, os.pardir))
 sys.path.insert(0, parent_dir_path)
-import optuna
-from ioflexheader import SAMPLER_MAP
+from ioflexheader import SAMPLER_MAP, OPTIMIZER_MAP
 from ray import tune
 from ray.tune.search.optuna import OptunaSearch
 from ray.tune.search.hyperopt import HyperOptSearch
@@ -22,10 +21,9 @@ from ray.tune.search.hebo import HEBOSearch
 from ray.tune.search.zoopt import ZOOptSearch
 from datetime import datetime
 from shutil import rmtree
-
-dir_path = os.path.dirname(os.path.realpath(__file__))
-parent_dir_path = os.path.abspath(os.path.join(dir_path, os.pardir))
-sys.path.insert(0, parent_dir_path)
+from ray.tune import Callback
+from ray.tune.experiment.trial import Trial
+from ray.tune.schedulers import TrialScheduler
 from ioflexpredict import ioflexpredict
 from ioflexheader import (
     get_config_map,
@@ -39,24 +37,7 @@ from utils import header
 
 
 def get_optimizer(optimizer_name):
-
-    match optimizer_name:
-        case "ngioh":
-            optimizer_desc = "NgIohTuned"
-            optimizer_class = ng.optimizers.NgIoh
-        case "twopde":
-            optimizer_desc = "Two Points Differential Evolution"
-            optimizer_class = ng.optimizers.TwoPointsDE
-        case "pdopo":
-            optimizer_desc = "PortfolioDiscreteOnePlusOne"
-            optimizer_class = ng.optimizers.PortfolioDiscreteOnePlusOne
-        case "tbpsa":
-            optimizer_desc = "TBPSA Test-based population-size adaptation"
-            optimizer_class = ng.optimizers.TBPSA
-        case _:
-            optimizer_desc = "NGOpt"
-            optimizer_class = ng.optimizers.NGOpt
-
+    optimizer_desc, optimizer_class = OPTIMIZER_MAP[optimizer_name]
     print("Running with Optimizer " + optimizer_desc + "\n")
     return optimizer_class
 
@@ -89,17 +70,15 @@ def get_algorithm(algo_name, opt_name=None):
 files_to_stripe = []
 files_to_clean = []
 
-
 def eval_func(sample_instance):
 
+    if hints == "cray" and not are_cray_hints_valid(sample_instance, num_ranks, num_nodes):
+        print("Invalid Cray Hints")
+        # Temporary solution
+        return tune.report({"elapsedtime": sys.float_info.max})
+        
     dir_path = os.environ.get("PWD", os.getcwd())
-
     config_path = os.path.join(dir_path, "config.conf" if ioflexset else "romio-hints")
-
-    # if hints == "cray":
-    # if options are not valid skip the trial
-    # if not are_cray_hints_valid(sample_instance, num_ranks, num_nodes):
-    # raise TrialPruned()
 
     if ioflexset:
         set_hints_with_ioflex(sample_instance, config_path)
@@ -264,6 +243,7 @@ def ioflexraytune():
         logfile_o = os.path.join(args["with_log_path"], f"out.{timestamp}")
         logfile_e = os.path.join(args["with_log_path"], f"err.{timestamp}")
 
+    global hints
     hints = args["with_hints"]
 
     CONFIG_MAP = get_config_map(hints)
@@ -304,8 +284,7 @@ def ioflexraytune():
                 mode="min",
             ),
             run_config=tune.RunConfig(
-                storage_path=storage_uri, name="raytune_io", log_to_file=True
-            ),
+                storage_path=storage_uri, name="raytune_io", log_to_file=True),
             param_space=params,
         )
 
@@ -314,7 +293,6 @@ def ioflexraytune():
     prefix = "config/"
     cols_name = [prefix + c for c in params.keys()]
     cols_name.append("elapsedtime")
-
     df = results.get_dataframe()
     df = df[cols_name]
 

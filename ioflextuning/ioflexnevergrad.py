@@ -20,41 +20,15 @@ from ioflexheader import (
     set_hints_with_ioflex,
     set_hints_env_romio,
     set_hints_env_cray,
-    are_cray_hints_valid,
+    OPTIMIZER_MAP,
 )
 from ioflexsetstriping import setstriping
 from utils import header
 
 
-def get_optimizer(optimizer_name, params=None, max_trials=50):
+def get_optimizer(optimizer_name):
 
-    match optimizer_name:
-        case "ngioh":
-            optimizer_desc = "NgIohTuned"
-            optimizer_class = ng.optimizers.NgIohTuned(
-                parametrization=params, budget=max_trials
-            )
-        case "twopde":
-            optimizer_desc = "Two Points Differential Evolution"
-            optimizer_class = ng.optimizers.TwoPointsDE(
-                parametrization=params, budget=max_trials
-            )
-        case "pdopo":
-            optimizer_desc = "PortfolioDiscreteOnePlusOne"
-            optimizer_class = ng.optimizers.PortfolioDiscreteOnePlusOne(
-                parametrization=params, budget=max_trials
-            )
-        case "tbpsa":
-            optimizer_desc = "TBPSA Test-based population-size adaptation"
-            optimizer_class = ng.optimizers.TBPSA(
-                parametrization=params, budget=max_trials
-            )
-        case _:
-            optimizer_desc = "NGOpt"
-            optimizer_class = ng.optimizers.NGOpt(
-                parametrization=params, budget=max_trials
-            )
-
+    optimizer_desc, optimizer_class = OPTIMIZER_MAP[optimizer_name]
     logging.info(f"Running with {optimizer_desc}")
 
     return optimizer_class
@@ -259,10 +233,10 @@ def ioflexnevergrad():
 
     outfile.write(",".join(header_items) + "\n")
 
-    ngoptimizer = get_optimizer(opt_name, params, max_trials)
+    ngoptimizer = get_optimizer(opt_name)
     # logger.info(f"Best trial: {study.best_trial}")
     #    joblib.dump(study, args["outoptuna"])
-    recommendation = ngoptimizer.minimize(eval_func)
+    recommendation = ngoptimizer(parametrization=params, budget=max_trials).minimize(eval_func)
 
     print("✅ Best configuration found:")
     print(recommendation.kwargs)

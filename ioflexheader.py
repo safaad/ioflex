@@ -1,5 +1,6 @@
 import os
 import optuna
+import nevergrad as ng
 import numpy as np
 
 
@@ -18,6 +19,15 @@ PRUNER_MAP = {
     "hyper": optuna.pruners.HyperbandPruner,
     "successivehalving": optuna.pruners.SuccessiveHalvingPruner,
     "nop" : optuna.pruners.NopPruner,
+}
+
+# NNEVERGRAD SPECIFIC
+OPTIMIZER_MAP = {
+    "ngioh": ("NgIohTuned", ng.optimizers.NgIoh),
+    "twopde": ("Two Points Differential Evolution", ng.optimizers.TwoPointsDE),
+    "pdopo": ("PortfolioDiscreteOnePlusOne",  ng.optimizers.PortfolioDiscreteOnePlusOne),
+    "tbpsa": ("TBPSA Test-based population-size adaptation", ng.optimizers.TBPSA),
+    "ngopt": ("NGOpt", ng.optimizers.NGOpt)
 }
 
 # IO CONFIGURATIONS Parameters Space

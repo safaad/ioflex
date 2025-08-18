@@ -10,7 +10,6 @@ def merge(dict1, dict2):
 
 
 def parsedarshan(logfile):
-    
     posix_time_list = ["POSIX_F_READ_TIME", "POSIX_F_WRITE_TIME", "POSIX_F_META_TIME"]
     posix_list = [
         "POSIX_OPENS",

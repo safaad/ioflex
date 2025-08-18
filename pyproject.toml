@@ -1,0 +1,47 @@
+[build-system]
+requires = [
+    "wheel",
+    "setuptools>=65.0.0",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ioflex"
+version = "0.1.0"
+description = "IOFlex is a portable I/O tuning tool designed to optimize I/O performance for HPC applications"
+authors = [{ name="Safaa Diab", email="safaa.diab@hlrs.de" }]
+readme = "README.md"
+requires-python = ">=3.8"
+
+dependencies = [
+    "darshan==3.4.7.0",
+    "joblib==1.4.2",
+    "nevergrad==1.0.12",
+    "numpy==2.3.2",
+    "optuna==4.3.0",
+    "pandas==2.3.1",
+    "pygad==3.5.0",
+    "ray==2.47.1",
+    "scikit_learn==1.7.1",
+    "scipy==1.16.1",
+    "tqdm==4.67.1",
+    "xgboost==3.0.4",
+]
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12"
+]
+
+[tool.setuptools.packages.find]
+include = ["ioflex*"]
+

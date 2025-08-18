@@ -10,17 +10,13 @@ import numpy as np
 from datetime import datetime
 from shutil import rmtree
 from scipy.stats import qmc
-import parsedarshan
+import ioflex.model.parser as parser
 import glob
 from tqdm.auto import tqdm
 
-dir_path = os.path.dirname(os.path.realpath(__file__))
-parent_dir_path = os.path.abspath(os.path.join(dir_path, os.pardir))
-sys.path.insert(0, parent_dir_path)
-from ioflexheader import get_config_map
-from utils import header
-from ioflexsetstriping import setstriping
 
+from ioflex.common import get_config_map
+from ioflex.striping import setstriping
 
 def configure_logging():
     logging.basicConfig(
@@ -52,7 +48,7 @@ def generate_lhs_samples(param_grid, nsamples):
     return sampled_configs
 
 
-def main():
+def run(args=None):
     ap = argparse.ArgumentParser(add_help=True)
     ap.add_argument(
         "--ioflex", action="store_true", default=False, help="Enable IOFlex"
@@ -180,7 +176,7 @@ def main():
         if args["darshan_path"]:
             logfile = os.path.join(args["darshan_path"], "*.darshan")
             for f in glob.glob(logfile):
-                localdictdarshan = parsedarshan.parsedarshan(f)
+                localdictdarshan = parser.parsedarshan(f)
                 if not dictdarshan:
                     dictdarshan = {key: [] for key in localdictdarshan.keys()}
 
@@ -202,5 +198,4 @@ def main():
 
 
 if __name__ == "__main__":
-    header.printheader()
-    main()
+    run()

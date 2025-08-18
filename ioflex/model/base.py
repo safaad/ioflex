@@ -9,14 +9,10 @@ from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestRegressor
 import itertools
 import joblib
-import os, sys
-import sys, os
 
-dir_path = os.path.dirname(os.path.realpath(__file__))
-parent_dir_path = os.path.abspath(os.path.join(dir_path, os.pardir))
-sys.path.insert(0, parent_dir_path)
-from ioflexheader import get_config_map, build_category_map, smape
-from utils import header
+
+from ioflex.common import get_config_map, build_category_map, smape
+
 
 
 def random_forest_regression_optuna(X, y, n_trials=100):
@@ -267,8 +263,8 @@ def predict_instance(model, instance):
     return prediction
 
 
-def ioflextrain():
-    # printheader()
+def run(args=None):
+    
     ap = argparse.ArgumentParser(add_help=True)
     ap.add_argument(
         "--algo",
@@ -340,8 +336,3 @@ def ioflextrain():
     joblib.dump(model, outmodelfile)
 
     # predictallcombinations(model)
-
-
-if __name__ == "__main__":
-    header.printheader()
-    ioflextrain()

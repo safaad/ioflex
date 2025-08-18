@@ -13,14 +13,10 @@ import logging
 from datetime import datetime
 from shutil import rmtree
 
-dir_path = os.path.dirname(os.path.realpath(__file__))
-parent_dir_path = os.path.abspath(os.path.join(dir_path, os.pardir))
-sys.path.insert(0, parent_dir_path)
-from ioflexpredict import ioflexpredict
-from ioflexheader import SAMPLER_MAP, PRUNER_MAP
-from ioflexheader import get_config_map, set_hints_with_ioflex, set_hints_env_romio, set_hints_env_cray, are_cray_hints_valid
-from ioflexsetstriping import setstriping
-from utils import header
+from ioflex.model import base
+from ioflex.common import SAMPLER_MAP, PRUNER_MAP
+from ioflex.common import get_config_map, set_hints_with_ioflex, set_hints_env_romio, set_hints_env_cray, are_cray_hints_valid
+from ioflex.striping import setstriping
 from optuna.exceptions import TrialPruned
 
 # Application Specific
@@ -112,7 +108,7 @@ def eval_func(
     elapsedtime = time.time() - start_time
 
     if model:
-        predtime = ioflexpredict.predict_instance(model, sample_instance)
+        predtime = base.predict_instance(model, sample_instance)
         outline = f"{configs_str},{elapsedtime},{predtime}\n"
     else:
         outline = f"{configs_str},{elapsedtime}\n"
@@ -132,8 +128,8 @@ def eval_func(
     return elapsedtime
 
 
-def ioflexoptuna():
-    ap = argparse.ArgumentParser()
+def run(args=None):
+    ap = argparse.ArgumentParser(prog="ioflex tune --optuna")
     ap.add_argument(
         "--ioflex", action="store_true", default=False, help="Enable IOFlex"
     )
@@ -203,7 +199,7 @@ def ioflexoptuna():
         help="MPIIO hints mode",
         choices=["romio", "cray", "ompio"],
     )
-    args = vars(ap.parse_args())
+    args = vars(ap.parse_args(args))
 
     global ioflexset, run_app, outfile, logisset, logfile_o, logfile_e, hints
     ioflexset = args["ioflex"]
@@ -262,8 +258,3 @@ def ioflexoptuna():
     if logisset:
         logfile_o.close()
         logfile_e.close()
-
-
-if __name__ == "__main__":
-    header.printheader()
-    ioflexoptuna()

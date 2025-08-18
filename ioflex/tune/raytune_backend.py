@@ -3,38 +3,33 @@ import os
 import sys
 import time
 import argparse
-import shlex
 import subprocess
-import nevergrad as ng
 import joblib
-dir_path = os.path.dirname(os.path.realpath(__file__))
-parent_dir_path = os.path.abspath(os.path.join(dir_path, os.pardir))
-sys.path.insert(0, parent_dir_path)
-from ioflexheader import SAMPLER_MAP, OPTIMIZER_MAP
+from shutil import rmtree
+from datetime import datetime
+
+import shlex
+import nevergrad as ng
 from ray import tune
 from ray.tune.search.optuna import OptunaSearch
 from ray.tune.search.hyperopt import HyperOptSearch
 from ray.tune.search.ax import AxSearch
 from ray.tune.search.bohb import TuneBOHB
 from ray.tune.search.nevergrad import NevergradSearch
-from ray.tune.search.hebo import HEBOSearch
 from ray.tune.search.zoopt import ZOOptSearch
-from datetime import datetime
-from shutil import rmtree
-from ray.tune import Callback
-from ray.tune.experiment.trial import Trial
-from ray.tune.schedulers import TrialScheduler
-from ioflexpredict import ioflexpredict
-from ioflexheader import (
+from ray.tune import with_parameters
+
+from ioflex.model import base
+from ioflex.common import (
     get_config_map,
     set_hints_with_ioflex,
     set_hints_env_romio,
     set_hints_env_cray,
     are_cray_hints_valid,
+    SAMPLER_MAP,
+    OPTIMIZER_MAP,
 )
-from ioflexsetstriping import setstriping
-from utils import header
-
+from ioflex.striping import setstriping
 
 def get_optimizer(optimizer_name):
     optimizer_desc, optimizer_class = OPTIMIZER_MAP[optimizer_name]
@@ -42,12 +37,12 @@ def get_optimizer(optimizer_name):
     return optimizer_class
 
 
-def get_algorithm(algo_name, opt_name=None):
+def get_algorithm(algo_name, opt_name=None, max_trials=None):
 
     match algo_name:
         case "optuna":
             sampler_desc, sampler_class = SAMPLER_MAP[opt_name]
-            print("Using sampler: ", sampler_desc) 
+            print("Using sampler: ", sampler_desc)
             search_algo = OptunaSearch(sampler=sampler_class())
         case "ax":
             search_algo = AxSearch()
@@ -70,13 +65,20 @@ def get_algorithm(algo_name, opt_name=None):
 files_to_stripe = []
 files_to_clean = []
 
-def eval_func(sample_instance):
 
-    if hints == "cray" and not are_cray_hints_valid(sample_instance, num_ranks, num_nodes):
+def eval_func(
+    sample_instance, hints, ioflexset, run_app, logisset, logfile_o, logfile_e,
+        num_ranks,
+        num_nodes,
+        model
+):
+    if hints == "cray" and not are_cray_hints_valid(
+        sample_instance, num_ranks, num_nodes
+    ):
         print("Invalid Cray Hints")
         # Temporary solution
         return tune.report({"elapsedtime": sys.float_info.max})
-        
+
     dir_path = os.environ.get("PWD", os.getcwd())
     config_path = os.path.join(dir_path, "config.conf" if ioflexset else "romio-hints")
 
@@ -121,8 +123,9 @@ def eval_func(sample_instance):
     elapsedtime = time.time() - start_time
 
     if model:
-        predtime.append(ioflexpredict.predict_instance(model, sample_instance))
-
+        predtime = (base.predict_instance(model, sample_instance))
+    else:
+        predtime = 0
     if logisset:
         with open(logfile_o, "w") as logfile:
             logfile.write(f"Config: {configs_str}\n\n{out.decode()}\n")
@@ -133,10 +136,10 @@ def eval_func(sample_instance):
         if os.path.exists(f):
             os.remove(f) if os.path.isfile(f) else rmtree(f)
 
-    tune.report({"elapsedtime": elapsedtime})
+    tune.report({"elapsedtime": elapsedtime, "predtime": predtime})
 
 
-def ioflexraytune():
+def run(args=None):
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--ioflex", action="store_true", default=False, help="Enable IOFlex"
@@ -216,54 +219,64 @@ def ioflexraytune():
         choices=["romio", "cray", "ompio"],
     )
 
-    args = ap.parse_args()
-    args_dict = vars(args)
-    
-    # Example usage
+    args_dict = vars(ap.parse_args(args))
+
     print("Selected algorithm:", args_dict["tuner"])
-    args = vars(ap.parse_args())
 
-    global ioflexset, run_app, outfile, logisset, logfile_o, logfile_e
-    ioflexset = args["ioflex"]
-    run_app = " ".join(args["cmd"])
-    outfile = args["outfile"]
+    ioflexset = args_dict["ioflex"]
+    run_app = " ".join(args_dict["cmd"])
+    outfile = args_dict["outfile"]
 
-    global num_ranks, num_nodes, model, hints, predtime, max_trials
-    predtime = []
-    num_ranks = args["num_ranks"]
-    num_nodes = args["num_nodes"]
-    max_trials = args["max_trials"]
+    global num_ranks, num_nodes, model
+    num_ranks = args_dict["num_ranks"]
+    num_nodes = args_dict["num_nodes"]
+    max_trials = args_dict["max_trials"]
 
-    model = joblib.load(args["with_model"]) if args["with_model"] else None
-    logisset = bool(args["with_log_path"])
+    model = joblib.load(args_dict["with_model"]) if args_dict["with_model"] else None
+    logisset = bool(args_dict["with_log_path"])
 
     if logisset:
-        os.makedirs(args["with_log_path"], exist_ok=True)
+        os.makedirs(args_dict["with_log_path"], exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H.%M.%S")
-        logfile_o = os.path.join(args["with_log_path"], f"out.{timestamp}")
-        logfile_e = os.path.join(args["with_log_path"], f"err.{timestamp}")
+        logfile_o = os.path.join(args_dict["with_log_path"], f"out.{timestamp}")
+        logfile_e = os.path.join(args_dict["with_log_path"], f"err.{timestamp}")
+    else:
+        logfile_o = None
+        logfile_e = None
 
-    global hints
-    hints = args["with_hints"]
+    hints = args_dict["with_hints"]
 
     CONFIG_MAP = get_config_map(hints)
     params = {
         key: (tune.choice(value)) for key, value in sorted(CONFIG_MAP.items()) if value
     }
 
-    tuner = args["tuner"]
+    tuner = args_dict["tuner"]
     match tuner:
         case "nevergrad":
-            algo = args["optimizer"]
+            algo = args_dict["optimizer"]
         case _:
-            algo = args["sampler"]
+            algo = args_dict["sampler"]
 
-    search_algo = get_algorithm(tuner, algo)
-    storage_uri = f"file://{os.path.abspath(args["outray"])}"
-    if args["prev"] is not None:
-        search_algo.restore_from_dir(os.path.join(args["prev"], "raytune_io"))
+    eval_func_with_parameters = with_parameters(
+        eval_func,
+        hints=hints,
+        ioflexset=ioflexset,
+        run_app=run_app,
+        logisset=logisset,
+        logfile_o=logfile_o,
+        logfile_e=logfile_e,
+        num_ranks=num_ranks,
+        num_nodes=num_nodes,
+        model=model,
+    )
+
+    search_algo = get_algorithm(tuner, algo, max_trials)
+    storage_uri = f"file://{os.path.abspath(args_dict["outray"])}"
+    if args_dict["prev"] is not None:
+        search_algo.restore_from_dir(os.path.join(args_dict["prev"], "raytune_io"))
         tuner = tune.Tuner(
-            eval_func,
+            eval_func_with_parameters,
             tune_config=tune.TuneConfig(
                 search_alg=search_algo,
                 num_samples=max_trials,
@@ -276,7 +289,7 @@ def ioflexraytune():
         )
     else:
         tuner = tune.Tuner(
-            eval_func,
+            eval_func_with_parameters,
             tune_config=tune.TuneConfig(
                 search_alg=search_algo,
                 num_samples=max_trials,
@@ -284,7 +297,8 @@ def ioflexraytune():
                 mode="min",
             ),
             run_config=tune.RunConfig(
-                storage_path=storage_uri, name="raytune_io", log_to_file=True),
+                storage_path=storage_uri, name="raytune_io", log_to_file=True
+            ),
             param_space=params,
         )
 
@@ -293,11 +307,10 @@ def ioflexraytune():
     prefix = "config/"
     cols_name = [prefix + c for c in params.keys()]
     cols_name.append("elapsedtime")
+    if model is not None:
+        cols_name.append("predtime")
     df = results.get_dataframe()
     df = df[cols_name]
-
-    if model is not None:
-        df["predicttime"] = predtime
     df.to_csv(outfile, index=False)
 
     print(results.get_best_result(metric="elapsedtime", mode="min").config)
@@ -305,8 +318,3 @@ def ioflexraytune():
     if logisset:
         logfile_o.close()
         logfile_e.close()
-
-
-if __name__ == "__main__":
-    header.printheader()
-    ioflexraytune()

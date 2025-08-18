@@ -112,5 +112,23 @@ Makefile
 romio-hints
 
 *.pkl
-test.py
+testing
 __pycache__
+
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+*.whl
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+.venv*/
+pip-wheel-metadata/

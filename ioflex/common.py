@@ -134,11 +134,11 @@ def set_hints_env_cray(config_dict, config_path):
                 crayhints.append(f"cb_buffer_size{separator}{val}")
             if key == "romio_filesystem_type":
                 os.environ.update({"ROMIO_FSTYPE_FORCE": val})
-            if key == "striping_factor":
-                cb_multi = 1
-                if "cray_cb_nodes_multiplier" in config_dict.keys():
-                    cb_multi = config_dict["cray_cb_nodes_multiplier"]
-                crayhints.append(f"cb_nodes{separator}{val*cb_multi}")
+            # if key == "striping_factor":
+            #     cb_multi = 1
+            #     if "cray_cb_nodes_multiplier" in config_dict.keys():
+            #         cb_multi = config_dict["cray_cb_nodes_multiplier"]
+            #     crayhints.append(f"cb_nodes{separator}{val*cb_multi}")
             else:
                 crayhints.append(f"{key}{separator}{val}")
     
@@ -164,14 +164,14 @@ def are_cray_hints_valid(config_dict, num_ranks, num_nodes):
         if cb_nodes > num_ranks:
             return False
     
-    if "cb_config_list" in keys and "striping_factor" in keys:
+    # if "cb_config_list" in keys and "striping_factor" in keys:
         
-        cb_ppn = int(config_dict["cb_config_list"].split(":")[1]) if config_dict["cb_config_list"].split(":")[1] != "*" else num_ranks//num_nodes
+    #     cb_ppn = int(config_dict["cb_config_list"].split(":")[1]) if config_dict["cb_config_list"].split(":")[1] != "*" else num_ranks//num_nodes
         
-        cb_nodes = config_dict["striping_factor"] * cb_multi
+    #     cb_nodes = config_dict["striping_factor"] * cb_multi
         
-        if min(cb_nodes, cb_ppn*num_nodes) > num_ranks:
-            return False
+    #     if min(cb_nodes, cb_ppn*num_nodes) > num_ranks:
+    #         return False
     
     return True
 

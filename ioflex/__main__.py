@@ -13,7 +13,6 @@ def main():
         if "--optuna" in sys.argv:
             from .tune import optuna_backend
             optuna_args = sys.argv[sys.argv.index("--optuna") + 1 :]
-            print(optuna_args)
             optuna_backend.run(optuna_args)
         elif "--ray" in sys.argv:
             from .tune import raytune_backend

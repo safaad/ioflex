@@ -272,7 +272,7 @@ def run(args=None):
     )
 
     search_algo = get_algorithm(tuner, algo, max_trials)
-    storage_uri = f"file://{os.path.abspath(args_dict["outray"])}"
+    storage_uri = f"file://{os.path.abspath(args_dict['outray'])}"
     if args_dict["prev"] is not None:
         search_algo.restore_from_dir(os.path.join(args_dict["prev"], "raytune_io"))
         tuner = tune.Tuner(
@@ -314,7 +314,3 @@ def run(args=None):
     df.to_csv(outfile, index=False)
 
     print(results.get_best_result(metric="elapsedtime", mode="min").config)
-
-    if logisset:
-        logfile_o.close()
-        logfile_e.close()

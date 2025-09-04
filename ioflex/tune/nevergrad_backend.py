@@ -9,14 +9,14 @@ import joblib
 import logging
 from datetime import datetime
 from shutil import rmtree
-
-
+import sys
 from ioflex.model import base
 from ioflex.common import (
     get_config_map,
     set_hints_with_ioflex,
     set_hints_env_romio,
     set_hints_env_cray,
+    are_cray_hints_valid,
     OPTIMIZER_MAP,
 )
 from ioflex.striping import setstriping
@@ -26,7 +26,7 @@ from ioflex.striping import setstriping
 def get_optimizer(optimizer_name):
 
     optimizer_desc, optimizer_class = OPTIMIZER_MAP[optimizer_name]
-    logging.info(f"Running with {optimizer_desc}")
+    print(f"Running with {optimizer_desc}")
 
     return optimizer_class
 
@@ -35,27 +35,20 @@ def get_optimizer(optimizer_name):
 files_to_stripe = []
 files_to_clean = []
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
-
 
 def eval_func(**kwargs):
 
     dir_path = os.environ.get("PWD", os.getcwd())
-
     config_path = os.path.join(dir_path, "config.conf" if ioflexset else "romio-hints")
 
     sample_instance = {}
     for key in config_space.keys():
         sample_instance[key] = kwargs[key]
 
-    # if hints == "cray":
-    # if options are not valid skip the trial
-    # if not are_cray_hints_valid(sample_instance, num_ranks, num_nodes):
-    # raise TrialPruned()
+    if hints == "cray" and not are_cray_hints_valid(sample_instance, num_ranks, num_nodes):
+        print("Invalid hints combinations")
+        return sys.float_info.max
+
 
     if ioflexset:
         set_hints_with_ioflex(sample_instance, config_path)
@@ -65,7 +58,7 @@ def eval_func(**kwargs):
             set_hints_env_romio(sample_instance, config_path)
             os.environ["ROMIO_HINTS"] = config_path
         if hints == "cray":
-            crayhints = set_hints_env_cray(sample_instance, config_path)
+            crayhints = set_hints_env_cray(sample_instance)
             os.environ["MPICH_MPIIO_HINTS"] = crayhints
         # if hints == "ompio":
         #  TODO
@@ -113,12 +106,13 @@ def eval_func(**kwargs):
         if os.path.exists(f):
             os.remove(f) if os.path.isfile(f) else rmtree(f)
 
-    logger.info(f"Running config: {outline}")
+    print(f"Running config: {outline}")
 
     return elapsedtime
 
 
 def run(args=None):
+    
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--ioflex", action="store_true", default=False, help="Enable IOFlex"
@@ -222,21 +216,21 @@ def run(args=None):
             if value
         }
     )
-    header_items = list(config_space.keys())
 
+    
+
+    header_items = list(config_space.keys())
     header_items.append("elapsedtime")
     if args["with_model"]:
         header_items.append("predicttime")
-
     outfile.write(",".join(header_items) + "\n")
 
     ngoptimizer = get_optimizer(opt_name)
-    # logger.info(f"Best trial: {study.best_trial}")
-    #    joblib.dump(study, args["outoptuna"])
-    recommendation = ngoptimizer(parametrization=params, budget=max_trials).minimize(eval_func)
 
-    print("Best configuration found:")
-    print(recommendation.kwargs)
+    optimizer = ngoptimizer(parametrization=params, budget=max_trials)
+    recommendation = optimizer.minimize(eval_func, verbosity=1)
+    print(f"Best Configuration: {recommendation.value[1]}, elapsed_time: {recommendation.loss}")
+    
     outfile.close()
     if logisset:
         logfile_o.close()

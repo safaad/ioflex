@@ -14,18 +14,17 @@ readme = "README.md"
 requires-python = ">=3.8"
 
 dependencies = [
-    "darshan==3.4.7.0",
-    "joblib==1.4.2",
-    "nevergrad==1.0.12",
-    "numpy==2.3.2",
-    "optuna==4.3.0",
-    "pandas==2.3.1",
-    "pygad==3.5.0",
-    "ray==2.47.1",
-    "scikit_learn==1.7.1",
-    "scipy==1.16.1",
-    "tqdm==4.67.1",
-    "xgboost==3.0.4",
+    "joblib>=1.4.2",
+    "nevergrad>=1.0.12",
+    "numpy>=2.3.2",
+    "optuna>=4.3.0",
+    "pandas>=2.3.1",
+    "ray>=2.47.1",
+    "scikit_learn>=1.7.1",
+    "ax-platform==0.3.0",
+    "scipy>=1.16.1",
+    "tqdm>=4.67.1",
+    "xgboost>=3.0.4",
 ]
 
 classifiers = [
@@ -41,6 +40,9 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12"
 ]
+
+[project.optional-dependencies]
+profiling = ["darshan==3.4.7.0"]
 
 [tool.setuptools.packages.find]
 include = ["ioflex*"]

@@ -26,7 +26,7 @@ OPTIMIZER_MAP = {
     "ngioh": ("NgIohTuned", ng.optimizers.NgIoh),
     "twopde": ("Two Points Differential Evolution", ng.optimizers.TwoPointsDE),
     "pdopo": ("PortfolioDiscreteOnePlusOne",  ng.optimizers.PortfolioDiscreteOnePlusOne),
-    "tbpsa": ("TBPSA Test-based population-size adaptation", ng.optimizers.TBPSA),
+    "tbpsa": ("TBPSA Test-based population-size adaptation", ng.optimizers.registry["TBPSA"]),
     "ngopt": ("NGOpt", ng.optimizers.NGOpt)
 }
 
@@ -45,16 +45,13 @@ CONFIG_ROMIO_MAP = {
 }
 
 CONFIG_CRAY_MAP = {
-    "romio_filesystem_type": [],
     "romio_ds_read": ["automatic", "enable", "disable"] ,
     "romio_ds_write": ["automatic", "enable", "disable"],
     "romio_cb_read": ["automatic", "enable", "disable"],
     "romio_cb_write": ["automatic", "enable", "disable"],
     "striping_factor": [4, 8, 16, 24, 32, 40, 48, 64, -1],
     "striping_unit": [1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728],
-    ## doesn't make in sense in cray-mpich as it's  multiplier*striping_factor
-    # "cb_nodes": [1, 2, 4, 8, 16, 24, 32, 48, 64, 128],
-    "cb_config_list": ["*:1", "*:*"],
+    "cb_nodes": [1, 2, 4, 8, 16, 24, 32, 48, 64, 128],
     "cray_cb_nodes_multiplier": [1, 2],
     "cray_cb_write_lock_mode": [0, 1, 2],
     "direct_io": ["true", "false"],
@@ -120,7 +117,7 @@ def set_hints_env_romio(config_dict, config_path):
                     
             config_file.write(f"{key}{separator}{val}\n")
             
-def set_hints_env_cray(config_dict, config_path):
+def set_hints_env_cray(config_dict):
     
     # For all files to be adjusted
     crayhints = ["*"]
@@ -134,11 +131,10 @@ def set_hints_env_cray(config_dict, config_path):
                 crayhints.append(f"cb_buffer_size{separator}{val}")
             if key == "romio_filesystem_type":
                 os.environ.update({"ROMIO_FSTYPE_FORCE": val})
-            # if key == "striping_factor":
-            #     cb_multi = 1
-            #     if "cray_cb_nodes_multiplier" in config_dict.keys():
-            #         cb_multi = config_dict["cray_cb_nodes_multiplier"]
-            #     crayhints.append(f"cb_nodes{separator}{val*cb_multi}")
+            if key == "striping_factor":
+                cb_multi = config_dict["cray_cb_nodes_multiplier"] if "cray_cb_nodes_multiplier" in config_dict.keys() else 1
+                config_dict["cb_nodes"] = val* cb_multi
+                crayhints.append(f"striping_factor{separator}{val}")
             else:
                 crayhints.append(f"{key}{separator}{val}")
     
@@ -155,14 +151,11 @@ def are_cray_hints_valid(config_dict, num_ranks, num_nodes):
         if ("romio_cb_write" in keys and config_dict["romio_cb_write"] == "disable") or ("romio_cb_read" in keys and config_dict["romio_cb_read"] == "disable"):
             return False
     
-    cb_multi = 1
-    if "cray_cb_nodes_multiplier" in keys:
-        cb_multi = config_dict["cray_cb_nodes_multiplier"]
-    
-    if "striping_factor" in keys:
-        cb_nodes = config_dict["striping_factor"] * cb_multi
-        if cb_nodes > num_ranks:
-            return False
+
+    cb_multi = config_dict["cray_cb_nodes_multiplier"] if "cray_cb_nodes_multiplier" in keys else 1
+    cb_nodes = config_dict["striping_factor"] * cb_multi if "striping_factor" in keys else config_dict["cb_nodes"]
+    if cb_nodes > num_ranks:
+        return False
     
     # if "cb_config_list" in keys and "striping_factor" in keys:
         

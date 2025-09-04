@@ -4,21 +4,14 @@ import os
 import shutil
 import subprocess
 import argparse
-import logging
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import warnings
 
 # === CONFIG ===
 SKIP_SMALL_FILE_SIZE = 1 * 1024 * 1024  # 1MB
 DD_BLOCK_SIZE = "4M"
 MAX_WORKERS = 8
-
-# === LOGGING ===
-logging.basicConfig(
-    filename="restriping.log",
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
 
 
 def run_lfs_setstripe(path: str, stripe_count: int, stripe_size: str = None):
@@ -45,7 +38,7 @@ def copy_file(src: Path, dest: Path):
         )
         shutil.copy2(src, dest)
     except subprocess.CalledProcessError:
-        logging.warning(f"dd failed fos {src}, falling back to shutil.copy2")
+        warnings.warn(f"dd failed fos {src}, falling back to shutil.copy2")
         shutil.copy2(src, dest)
 
 
@@ -57,7 +50,7 @@ def restripe_file(
 
     try:
         if src_file.stat().st_size < SKIP_SMALL_FILE_SIZE:
-            logging.info(f"Skipping small file: {src_file}")
+            print(f"Skipping small file: {src_file}")
             return
 
         tmp_file.parent.mkdir(parents=True, exist_ok=True)
@@ -66,9 +59,9 @@ def restripe_file(
         copy_file(src_file, tmp_file)
 
         tmp_file.replace(src_file)
-        logging.info(f"Re-striped: {src_file}")
+        print(f"Re-striped: {src_file}")
     except Exception as e:
-        logging.error(f"Failed to restripe {src_file}: {e}")
+        print(f"Failed to restripe {src_file}: {e}")
 
 
 def restripe_directory(target_dir: Path, stripe_count: int, stripe_size: str = None):
@@ -83,9 +76,9 @@ def restripe_directory(target_dir: Path, stripe_count: int, stripe_size: str = N
             dir_path = Path(root) / d
             try:
                 run_lfs_setstripe(str(dir_path), stripe_count, stripe_size)
-                logging.info(f"Set stripe on dir: {dir_path}")
+                print(f"Set stripe on dir: {dir_path}")
             except subprocess.CalledProcessError:
-                logging.warning(f"Failed to set stripe on dir: {dir_path}")
+                warnings.warn(f"Failed to set stripe on dir: {dir_path}")
 
         for f in files:
             src_file = Path(root) / f
@@ -98,7 +91,7 @@ def restripe_directory(target_dir: Path, stripe_count: int, stripe_size: str = N
             future.result()
 
     shutil.rmtree(tmp_dir)
-    logging.info(f"Completed re-striping for directory: {target_dir}")
+    print(f"Completed re-striping for directory: {target_dir}")
 
 
 def setstriping(path, stripe_count, stripe_size):
@@ -118,7 +111,6 @@ def setstriping(path, stripe_count, stripe_size):
         else:
             print("Unsupported path type.")
     except Exception as e:
-        logging.error(f"Fatal error: {e}")
         print(f"Error: {e}")
 
 
@@ -138,7 +130,6 @@ def main():
     if not target.exists():
         print(f"Error: Path does not exist: {target}")
         return
-
     try:
         if target.is_file():
             tmp_dir = target.parent / ".tmp_stripe"
@@ -150,7 +141,6 @@ def main():
         else:
             print("Unsupported path type.")
     except Exception as e:
-        logging.error(f"Fatal error: {e}")
         print(f"Error: {e}")
 
 

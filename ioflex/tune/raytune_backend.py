@@ -26,6 +26,7 @@ from ioflex.common import (
     set_hints_env_romio,
     set_hints_env_cray,
     are_cray_hints_valid,
+    remove_path,
     SAMPLER_MAP,
     OPTIMIZER_MAP,
 )
@@ -90,7 +91,7 @@ def eval_func(
             set_hints_env_romio(sample_instance, config_path)
             os.environ["ROMIO_HINTS"] = config_path
         if hints == "cray":
-            crayhints = set_hints_env_cray(sample_instance, config_path)
+            crayhints = set_hints_env_cray(sample_instance)
             os.environ["MPICH_MPIIO_HINTS"] = crayhints
         # if hints == "ompio":
         #  TODO
@@ -133,8 +134,7 @@ def eval_func(
             logfile.write(f"Config: {configs_str}\n\n{err.decode()}\n")
 
     for f in files_to_clean:
-        if os.path.exists(f):
-            os.remove(f) if os.path.isfile(f) else rmtree(f)
+        remove_path(f)
 
     tune.report({"elapsedtime": elapsedtime, "predtime": predtime})
 

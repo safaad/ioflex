@@ -1,8 +1,11 @@
 import os
+import glob
+import shutil
 import optuna
 import nevergrad as ng
 import numpy as np
-
+import darshan
+from darshan.backend.cffi_backend import accumulate_records
 
 # OPTUNA SPECIFIC
 SAMPLER_MAP = {
@@ -169,3 +172,40 @@ def are_cray_hints_valid(config_dict, num_ranks, num_nodes):
     return True
 
 
+def get_bandwidth_darshan(log_path, mod):
+    
+    log_file = glob.glob(log_path)[0]
+    
+    report = darshan.DarshanReport(log_file, read_all=False)
+    if mod not in report.modules or len(report.records[mod]) == 0:
+        print("Empty Darshan File")
+        return -1
+    report.mod_read_all_records(mod)
+    recs = report.records[mod].to_df()
+    acc_rec = accumulate_records(recs, mod, report.metadata['job']['nprocs'])
+    
+    bandwidth_slowest = acc_rec.derived_metrics.agg_perf_by_slowest
+    os.remove(log_file)
+    
+    return bandwidth_slowest
+
+def remove_path(path_pattern: str):
+    
+    matches = glob.glob(path_pattern, recursive=True)
+    
+    if not matches:
+        print(f"No matches found for: {path_pattern}")
+        return
+    for path in matches:
+        try:
+            if os.path.isfile(path) or os.path.islink(path):
+                os.unlink(path)
+                print(f"Removed file: {path}")
+            elif os.path.isdir(path):
+                shutil.rmtree(path)
+                print(f"Removed directory: {path}")
+            else:
+                print(f"Skipping unkown type: {path}")
+        except Exception as e:
+            print(f"Failed to remove {path}: {e}")
+    

@@ -1,11 +1,16 @@
 # IOFlex 
 IOFlex is a portable I/O tuning tool designed to optimize I/O performance for HPC (High-Performance Computing) applications without requiring source code modifications. 
 
-IOFlex Consists of two main component (i) IOFlex I/O wrapper library and (ii) IOFlex I/O auto-tuning library.
+IOFlex Consists of two main component (i) IOFlex I/O wrapper dynamic library and (ii) IOFlex I/O tune python library.
 
-
+IOFlex key features:
+- An MPI-I/O wrapper library to adjust I/O hints without requiring source code modifications.
+- It supports multiple MPI implementations and higher level I/O libraries such as HDF5 and PNetCDF.
+- It works with profiling tools like Darshan.
+- A python library to tune I/O configurations efficiently. IOFlex tune integrates various state-of-the-art hyperparameter tuning libraries including Ray Tune and Optuna.
+- Flexible and portable library.
 ## I. IOFlex I/O Wrapper
-IOFlex adjusts I/O configurations like Lustre striping and ROMIO hints. It integrates seamlessly, either through LD_PRELOAD or by linking the shared library during compilation. IOFlex Works with various MPI environments like OpenMPI and MPT, with support for profiling tools like Darshan. I/O configurations set using IOFlex override any previously I/O configuration.
+IOFlex adjusts I/O configurations including Lustre striping and MPI-I/O hints. It integrates seamlessly, either through LD_PRELOAD at runtime or by linking the shared library at compilation time. IOFlex support with various MPI environments like OpenMPI and MPT, with support for profiling tools like Darshan. I/O configurations set using IOFlex override any previously I/O configuration.
 ### Prerequisites
 
 - libconfuse: https://github.com/libconfuse/libconfuse.git

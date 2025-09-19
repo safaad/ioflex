@@ -17,6 +17,7 @@ from ioflex.common import (
     set_hints_env_romio,
     set_hints_env_cray,
     are_cray_hints_valid,
+    remove_path,
     OPTIMIZER_MAP,
 )
 from ioflex.striping import setstriping
@@ -103,8 +104,7 @@ def eval_func(**kwargs):
         logfile_e.write(f"Config: {configs_str}\n\n{err.decode()}\n")
 
     for f in files_to_clean:
-        if os.path.exists(f):
-            os.remove(f) if os.path.isfile(f) else rmtree(f)
+        remove_path(f)
 
     print(f"Running config: {outline}")
 

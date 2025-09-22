@@ -174,10 +174,13 @@ def are_cray_hints_valid(config_dict, num_ranks, num_nodes):
 
 def get_bandwidth_darshan(log_path, mod):
     
-    log_file = glob.glob(log_path)[0]
-    
+    darshan_files = glob.glob(log_path)
+    if len(darshan_files) == 0:
+        print("No darshan file generated")
+        return -1
+    log_file = darshan_files[0]
     report = darshan.DarshanReport(log_file, read_all=False)
-    if mod not in report.modules or len(report.records[mod]) == 0:
+    if mod not in report.modules or report.modules[mod]['len'] == 0:
         print("Empty Darshan File")
         return -1
     report.mod_read_all_records(mod)

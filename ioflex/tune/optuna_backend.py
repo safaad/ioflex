@@ -28,11 +28,6 @@ from optuna.exceptions import TrialPruned
 files_to_stripe = []
 files_to_clean = []
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
 
 def get_sampler(sampler_name, config_space=None):
 
@@ -119,28 +114,31 @@ def eval_func(
     out, err = process.communicate()
     objective = time.time() - start_time
 
+    outline = f"{configs_str},{objective}"
     if tune_bandwidth:
         darshan_dir = os.environ["DARSHAN_LOG_DIR_PATH"]
         log_path = os.path.join(darshan_dir, "*.darshan")
-        outline = f"{configs_str},{objective}"
         # get MPI-IO bandwidth MiB/s
         objective = get_bandwidth_darshan(log_path, "MPI-IO")
+        if objective == -1:
+            raise TrialPruned()
+        outline = f"{outline},{objective}"
     if model:
         pred = base.predict_instance(model, sample_instance)
-        outline = f"{configs_str},{objective},{pred}\n"
+        outline = f"{outline},{pred}\n"
     else:
-        outline = f"{configs_str},{objective}\n"
+        outline = f"{outline}\n"
 
     outfile.write(outline)
 
     if logisset:
-        logfile_o.write(f"Config: {configs_str}\n\n{out.decode()}\n")
-        logfile_e.write(f"Config: {configs_str}\n\n{err.decode()}\n")
+        logfile_o.write(f"Config: {outline}\n\n{out.decode()}\n")
+        logfile_e.write(f"Config: {outline}\n\n{err.decode()}\n")
 
     for f in files_to_clean:
         remove_path(f)
 
-    logger.info(f"Running config: {outline}")
+    print(f"Running config: {outline}")
 
     return objective
 
@@ -252,7 +250,7 @@ def run(args=None):
         header_items.append("I/O-Bandwidth-Mib/s")
         
     if args["with_model"]:
-        header_items.append("PredictedObjective")
+        header_items.append("Predicted-Objective")
 
     outfile.write(",".join(header_items) + "\n")
 
@@ -274,7 +272,7 @@ def run(args=None):
         lambda trial: eval_func(trial, config_space, model), n_trials=args["max_trials"]
     )
 
-    logger.info(f"Best trial: {study.best_trial}")
+    print(f"Best trial: {study.best_trial}")
     joblib.dump(study, args["outoptuna"])
 
     outfile.close()

@@ -19,7 +19,7 @@ from ioflex.common import (
     set_hints_env_cray,
     are_cray_hints_valid,
     get_bandwidth_darshan,
-    remove_path
+    remove_path,
 )
 from ioflex.striping import setstriping
 from optuna.exceptions import TrialPruned
@@ -53,6 +53,8 @@ def get_pruner(pruner_name):
 
 
 # Default ROMIO Configuration
+
+
 def eval_func(
     trial,
     config=get_config_map("romio"),
@@ -72,6 +74,7 @@ def eval_func(
     if hints == "cray":
         # if options are not valid skip the trial
         if not are_cray_hints_valid(sample_instance, num_ranks, num_nodes):
+
             raise TrialPruned()
 
     if ioflexset:
@@ -144,6 +147,7 @@ def eval_func(
 
 
 def run(args=None):
+
     ap = argparse.ArgumentParser(prog="ioflex tune --optuna")
     ap.add_argument(
         "--ioflex", action="store_true", default=False, help="Enable IOFlex"
@@ -248,7 +252,7 @@ def run(args=None):
     header_items.append("elapsedtime")
     if args["tune_bandwidth"]:
         header_items.append("I/O-Bandwidth-Mib/s")
-        
+
     if args["with_model"]:
         header_items.append("Predicted-Objective")
 

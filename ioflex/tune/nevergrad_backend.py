@@ -18,6 +18,7 @@ from ioflex.common import (
     set_hints_env_cray,
     are_cray_hints_valid,
     remove_path,
+    get_bandwidth_darshan,
     OPTIMIZER_MAP,
 )
 from ioflex.striping import setstriping
@@ -89,13 +90,25 @@ def eval_func(**kwargs):
         cwd=os.getcwd(),
     )
     out, err = process.communicate()
-    elapsedtime = time.time() - start_time
+    objective = time.time() - start_time
 
+    outline = f"{configs_str},{objective}"
+    if tune_bandwidth:
+        darshan_dir = os.environ["DARSHAN_LOG_DIR_PATH"]
+        log_path = os.path.join(darshan_dir, "*.darshan")
+        # get MPI-IO bandwidth MiB/s
+        objective = get_bandwidth_darshan(log_path, "MPI-IO")
+        if objective == -1:
+            print("Error Empty Darshan File")
+            return sys.float_info.max
+        outline = f"{outline},{objective}"
+        # Transform maximization to minimization problem for bandwidth
+        objective = objective * -1
     if model:
-        predtime = base.predict_instance(model, sample_instance)
-        outline = f"{configs_str},{elapsedtime},{predtime}\n"
+        pred = base.predict_instance(model, sample_instance)
+        outline = f"{outline},{pred}\n"
     else:
-        outline = f"{configs_str},{elapsedtime}\n"
+        outline = f"{outline}\n"
 
     outfile.write(outline)
 
@@ -107,8 +120,9 @@ def eval_func(**kwargs):
         remove_path(f)
 
     print(f"Running config: {outline}")
-
-    return elapsedtime
+    
+    
+    return objective
 
 
 def run(args=None):
@@ -173,19 +187,25 @@ def run(args=None):
         help="MPIIO hints mode",
         choices=["romio", "cray", "ompio"],
     )
+    ap.add_argument(
+        "-b",
+        "--tune_bandwidth",
+        action="store_true",
+        default=False,
+        help="Enable IOFlex",
+    )
     args = vars(ap.parse_args(args))
 
-    global ioflexset, run_app, outfile, logisset, logfile_o, logfile_e
+    global ioflexset, run_app, outfile, logisset, logfile_o, logfile_e, tune_bandwidth
     ioflexset = args["ioflex"]
     run_app = " ".join(args["cmd"])
     outfile = open(args["outfile"], "w")
+    tune_bandwidth = args["tune_bandwidth"]
 
     global num_ranks, num_nodes
     num_ranks = args["num_ranks"]
     num_nodes = args["num_nodes"]
-
     max_trials = args["max_trials"]
-
     opt_name = args["optimizer"]
 
     global model
@@ -217,20 +237,24 @@ def run(args=None):
         }
     )
 
-    
-
     header_items = list(config_space.keys())
     header_items.append("elapsedtime")
+    if args["tune_bandwidth"]:
+        header_items.append("I/O-Bandwidth-Mib/s")
+
     if args["with_model"]:
-        header_items.append("predicttime")
+        header_items.append("Predicted-Objective")
+
     outfile.write(",".join(header_items) + "\n")
 
     ngoptimizer = get_optimizer(opt_name)
 
     optimizer = ngoptimizer(parametrization=params, budget=max_trials)
     recommendation = optimizer.minimize(eval_func, verbosity=1)
-    print(f"Best Configuration: {recommendation.value[1]}, elapsed_time: {recommendation.loss}")
-    
+    if tune_bandwidth:
+        print(f"Best Configuration: {recommendation.value[1]}, I/O Bandwidth MiB/s: {recommendation.loss*(-1)}")
+    else:
+        print(f"Best Configuration: {recommendation.value[1]}, ElapsedTime (s): {recommendation.loss}")
     outfile.close()
     if logisset:
         logfile_o.close()

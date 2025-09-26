@@ -135,8 +135,7 @@ def set_hints_env_cray(config_dict):
             if key == "romio_filesystem_type":
                 os.environ.update({"ROMIO_FSTYPE_FORCE": val})
             if key == "striping_factor":
-                cb_multi = config_dict["cray_cb_nodes_multiplier"] if "cray_cb_nodes_multiplier" in config_dict.keys() else 1
-                config_dict["cb_nodes"] = val* cb_multi
+                # cb_multi = config_dict["cray_cb_nodes_multiplier"] if "cray_cb_nodes_multiplier" in config_dict.keys() else 1
                 crayhints.append(f"striping_factor{separator}{val}")
             else:
                 crayhints.append(f"{key}{separator}{val}")

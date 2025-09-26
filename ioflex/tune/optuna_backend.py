@@ -53,8 +53,6 @@ def get_pruner(pruner_name):
 
 
 # Default ROMIO Configuration
-
-
 def eval_func(
     trial,
     config=get_config_map("romio"),

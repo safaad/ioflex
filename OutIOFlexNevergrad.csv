@@ -1,3 +1,0 @@
-cb_config_list,cb_nodes,romio_cb_read,romio_cb_write,romio_ds_read,romio_ds_write,romio_no_indep_rw,striping_factor,striping_unit,elapsedtime
-*:1,16,enable,automatic,disable,disable,false,32,16777216,1.0013508796691895
-*:*,16,automatic,enable,enable,automatic,false,32,16777216,1.0013279914855957

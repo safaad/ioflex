@@ -180,6 +180,7 @@ def get_bandwidth_darshan(log_path, mod):
     log_file = darshan_files[0]
     report = darshan.DarshanReport(log_file, read_all=False)
     if mod not in report.modules or report.modules[mod]['len'] == 0:
+        os.remove(log_file)
         print("Empty Darshan File")
         return -1
     report.mod_read_all_records(mod)

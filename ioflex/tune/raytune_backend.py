@@ -26,11 +26,13 @@ from ioflex.common import (
     set_hints_env_romio,
     set_hints_env_cray,
     are_cray_hints_valid,
+    get_bandwidth_darshan,
     remove_path,
     SAMPLER_MAP,
     OPTIMIZER_MAP,
 )
 from ioflex.striping import setstriping
+
 
 def get_optimizer(optimizer_name):
     optimizer_desc, optimizer_class = OPTIMIZER_MAP[optimizer_name]
@@ -38,7 +40,7 @@ def get_optimizer(optimizer_name):
     return optimizer_class
 
 
-def get_algorithm(algo_name, opt_name=None, max_trials=None):
+def get_algorithm(algo_name, opt_name=None, max_trials=None, metric=None, mode=None):
 
     match algo_name:
         case "optuna":
@@ -54,7 +56,7 @@ def get_algorithm(algo_name, opt_name=None, max_trials=None):
         case "nevergrad":
             opt = get_optimizer(opt_name)
             search_algo = NevergradSearch(
-                optimizer=opt, metric="elapsedtime", mode="min"
+                optimizer=opt, metric=metric, mode=mode
             )
         case "zoopt":
             search_algo = ZOOptSearch(budget=max_trials)
@@ -68,18 +70,28 @@ files_to_clean = []
 
 
 def eval_func(
-    sample_instance, hints, ioflexset, run_app, logisset, logfile_o, logfile_e,
-        num_ranks,
-        num_nodes,
-        model
+    sample_instance,
+    hints,
+    ioflexset,
+    run_app,
+    logisset,
+    logfile_o,
+    logfile_e,
+    num_ranks,
+    num_nodes,
+    tune_bandwidth,
+    model,
 ):
     if hints == "cray" and not are_cray_hints_valid(
         sample_instance, num_ranks, num_nodes
     ):
         print("Invalid Cray Hints")
         # Temporary solution
-        return tune.report({"elapsedtime": sys.float_info.max})
-
+        if tune_bandwidth:
+            return tune.report({"Bandwidth":0.0,"elapsedtime": sys.float_info.max})
+        else:
+            return tune.report({"elapsedtime": sys.float_info.max})
+        
     dir_path = os.environ.get("PWD", os.getcwd())
     config_path = os.path.join(dir_path, "config.conf" if ioflexset else "romio-hints")
 
@@ -123,20 +135,29 @@ def eval_func(
     out, err = process.communicate()
     elapsedtime = time.time() - start_time
 
-    if model:
-        predtime = (base.predict_instance(model, sample_instance))
-    else:
-        predtime = 0
+    if tune_bandwidth:
+        darshan_dir = os.environ["DARSHAN_LOG_DIR_PATH"]
+        log_path = os.path.join(darshan_dir, "*.darshan")
+        print(log_path)
+        # get MPI-IO bandwidth MiB/s
+        objective = get_bandwidth_darshan(log_path, "MPI-IO")
+        if objective == -1:
+            return tune.report({"Bandwidth":0.0,"elapsedtime": sys.float_info.max})
+
+    pred = base.predict_instance(model, sample_instance) if model else 0
+    
     if logisset:
         with open(logfile_o, "w") as logfile:
             logfile.write(f"Config: {configs_str}\n\n{out.decode()}\n")
         with open(logfile_e, "w") as logfile:
             logfile.write(f"Config: {configs_str}\n\n{err.decode()}\n")
-
     for f in files_to_clean:
         remove_path(f)
-
-    tune.report({"elapsedtime": elapsedtime, "predtime": predtime})
+        
+    if tune_bandwidth:
+        tune.report({"Bandwidth": objective,"elapsedtime": elapsedtime, "predicted": pred})
+    else:    
+        tune.report({"elapsedtime": elapsedtime, "predicted": pred})
 
 
 def run(args=None):
@@ -218,12 +239,19 @@ def run(args=None):
         help="MPIIO hints mode",
         choices=["romio", "cray", "ompio"],
     )
-
+    ap.add_argument(
+        "-b",
+        "--tune_bandwidth",
+        action="store_true",
+        default=False,
+        help="Enable IOFlex",
+    )
     args_dict = vars(ap.parse_args(args))
 
     print("Selected algorithm:", args_dict["tuner"])
 
     ioflexset = args_dict["ioflex"]
+    tune_bandwidth = args_dict["tune_bandwidth"]
     run_app = " ".join(args_dict["cmd"])
     outfile = args_dict["outfile"]
 
@@ -268,11 +296,18 @@ def run(args=None):
         logfile_e=logfile_e,
         num_ranks=num_ranks,
         num_nodes=num_nodes,
+        tune_bandwidth=tune_bandwidth,
         model=model,
     )
 
-    search_algo = get_algorithm(tuner, algo, max_trials)
+    metric = "Bandwidth" if tune_bandwidth else "elapsedtime"
+    mode = "max" if tune_bandwidth else "min"
+    
+    search_algo = get_algorithm(tuner, algo, max_trials, metric, mode)
     storage_uri = f"file://{os.path.abspath(args_dict['outray'])}"
+
+
+    
     if args_dict["prev"] is not None:
         search_algo.restore_from_dir(os.path.join(args_dict["prev"], "raytune_io"))
         tuner = tune.Tuner(
@@ -280,8 +315,8 @@ def run(args=None):
             tune_config=tune.TuneConfig(
                 search_alg=search_algo,
                 num_samples=max_trials,
-                metric="elapsedtime",
-                mode="min",
+                metric=metric,
+                mode=mode,
             ),
             run_config=tune.RunConfig(
                 storage_path=storage_uri, name="raytune_io", log_to_file=True
@@ -293,8 +328,8 @@ def run(args=None):
             tune_config=tune.TuneConfig(
                 search_alg=search_algo,
                 num_samples=max_trials,
-                metric="elapsedtime",
-                mode="min",
+                metric=metric,
+                mode=mode,
             ),
             run_config=tune.RunConfig(
                 storage_path=storage_uri, name="raytune_io", log_to_file=True
@@ -307,10 +342,10 @@ def run(args=None):
     prefix = "config/"
     cols_name = [prefix + c for c in params.keys()]
     cols_name.append("elapsedtime")
+    if tune_bandwidth:
+        cols_name.append("Bandwidth")
     if model is not None:
         cols_name.append("predtime")
     df = results.get_dataframe()
     df = df[cols_name]
     df.to_csv(outfile, index=False)
-
-    print(results.get_best_result(metric="elapsedtime", mode="min").config)

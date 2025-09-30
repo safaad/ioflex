@@ -1,0 +1,16 @@
+{
+    "romio_ds_read": ["automatic", "enable", "disable"] ,
+    "romio_ds_write": ["automatic", "enable", "disable"],
+    "romio_cb_read": ["automatic", "enable", "disable"],
+    "romio_cb_write": ["automatic", "enable", "disable"],
+    "striping_factor": [4, 8, 16, 24, 32, 40, 48, 64, -1],
+    "striping_unit": [1048576, 2097152, 4194304, 8388608, 16777216, 33554432, 67108864, 134217728],
+    "cb_nodes": [1, 2, 4, 8, 16, 24, 32, 48, 64, 128],
+    "cray_cb_nodes_multiplier": [1, 2],
+    "cray_cb_write_lock_mode": [0, 1, 2],
+    "direct_io": ["true", "false"],
+    "aggregator_placement_stride": [],
+    "romio_no_indep_rw": ["true", "false"],
+    "files_to_clean": [],
+    "files_to_stripe": []
+}

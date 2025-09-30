@@ -5,11 +5,10 @@ import time
 import argparse
 import subprocess
 import joblib
-from shutil import rmtree
+from pathlib import Path
 from datetime import datetime
 
 import shlex
-import nevergrad as ng
 from ray import tune
 from ray.tune.search.optuna import OptunaSearch
 from ray.tune.search.hyperopt import HyperOptSearch
@@ -63,12 +62,6 @@ def get_algorithm(algo_name, opt_name=None, max_trials=None, metric=None, mode=N
 
     return search_algo
 
-
-# Application Specific
-files_to_stripe = []
-files_to_clean = []
-
-
 def eval_func(
     sample_instance,
     hints,
@@ -80,6 +73,8 @@ def eval_func(
     num_ranks,
     num_nodes,
     tune_bandwidth,
+    files_to_clean, 
+    files_to_stripe,
     model,
 ):
     if hints == "cray" and not are_cray_hints_valid(
@@ -244,7 +239,14 @@ def run(args=None):
         "--tune_bandwidth",
         action="store_true",
         default=False,
-        help="Enable IOFlex",
+        help="Use I/O bandwidth as the tuning objective",
+    )
+    ap.add_argument(
+        "--config",
+        type=str,
+        default=Path(__file__).parent.parent / "configs" / "tune_config_romio.json",
+        help="Path to JSON configuration file (default: ../configs/tune_config_romio.json"
+        
     )
     args_dict = vars(ap.parse_args(args))
 
@@ -255,7 +257,6 @@ def run(args=None):
     run_app = " ".join(args_dict["cmd"])
     outfile = args_dict["outfile"]
 
-    global num_ranks, num_nodes, model
     num_ranks = args_dict["num_ranks"]
     num_nodes = args_dict["num_nodes"]
     max_trials = args_dict["max_trials"]
@@ -273,8 +274,9 @@ def run(args=None):
         logfile_e = None
 
     hints = args_dict["with_hints"]
-
-    CONFIG_MAP = get_config_map(hints)
+    config_path = args_dict["config"]
+    
+    CONFIG_MAP, files_to_clean, files_to_stripe  = get_config_map(hints, config_path)
     params = {
         key: (tune.choice(value)) for key, value in sorted(CONFIG_MAP.items()) if value
     }
@@ -297,6 +299,8 @@ def run(args=None):
         num_ranks=num_ranks,
         num_nodes=num_nodes,
         tune_bandwidth=tune_bandwidth,
+        files_to_clean=files_to_clean, 
+        files_to_stripe=files_to_stripe,
         model=model,
     )
 
@@ -345,7 +349,7 @@ def run(args=None):
     if tune_bandwidth:
         cols_name.append("Bandwidth")
     if model is not None:
-        cols_name.append("predtime")
+        cols_name.append("predicted")
     df = results.get_dataframe()
     df = df[cols_name]
     df.to_csv(outfile, index=False)

@@ -7,6 +7,7 @@ import argparse
 import shlex
 import subprocess
 import joblib
+from pathlib import Path
 import logging
 from datetime import datetime
 import optuna
@@ -23,10 +24,6 @@ from ioflex.common import (
 )
 from ioflex.striping import setstriping
 from optuna.exceptions import TrialPruned
-
-# Application Specific
-files_to_stripe = []
-files_to_clean = []
 
 
 def get_sampler(sampler_name, config_space=None):
@@ -55,7 +52,7 @@ def get_pruner(pruner_name):
 # Default ROMIO Configuration
 def eval_func(
     trial,
-    config=get_config_map("romio"),
+    config,
     model=None,
 ):
 
@@ -217,11 +214,18 @@ def run(args=None):
         "--tune_bandwidth",
         action="store_true",
         default=False,
-        help="Enable IOFlex",
+        help="Use I/O bandwidth as the tuning objective",
+    )
+    ap.add_argument(
+        "--config",
+        type=str,
+        default=Path(__file__).parent.parent / "configs" / "tune_config_romio.json",
+        help="Path to JSON configuration file (default: ../configs/tune_config_romio.json"
+        
     )
     args = vars(ap.parse_args(args))
 
-    global ioflexset, run_app, outfile, logisset, logfile_o, logfile_e, hints, tune_bandwidth
+    global ioflexset, run_app, outfile, logisset, logfile_o, logfile_e, hints, tune_bandwidth, files_to_clean, files_to_stripe
     ioflexset = args["ioflex"]
     run_app = " ".join(args["cmd"])
     tune_bandwidth = args["tune_bandwidth"]
@@ -242,8 +246,9 @@ def run(args=None):
 
     # Define configurations mappings
     hints = args["with_hints"]
+    config_path = args["config"]
 
-    CONFIG_MAP = get_config_map(hints)
+    CONFIG_MAP, files_to_clean, files_to_stripe  = get_config_map(hints, config_path)
     config_space = {key: value for key, value in sorted(CONFIG_MAP.items()) if value}
     header_items = list(config_space.keys())
 

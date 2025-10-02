@@ -59,6 +59,7 @@ CONFIG_CRAY_KEY = {
     "striping_factor",
     "striping_unit",
     "cb_nodes",
+    "cb_config_list",
     "cray_cb_nodes_multiplier",
     "cray_cb_write_lock_mode",
     "direct_io",

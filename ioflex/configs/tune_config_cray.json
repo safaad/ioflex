@@ -11,6 +11,7 @@
     "direct_io": ["true", "false"],
     "aggregator_placement_stride": [],
     "romio_no_indep_rw": ["true", "false"],
+    "cb_config_list": [],
     "files_to_clean": [],
     "files_to_stripe": []
 }

@@ -5,6 +5,7 @@ import argparse
 import shlex
 import subprocess
 import nevergrad as ng
+import json
 import joblib
 from pathlib import Path
 from datetime import datetime
@@ -24,13 +25,13 @@ from ioflex.common import (
 from ioflex.striping import setstriping
 
 
-
 def get_optimizer(optimizer_name):
 
     optimizer_desc, optimizer_class = OPTIMIZER_MAP[optimizer_name]
     print(f"Running with {optimizer_desc}")
 
     return optimizer_class
+
 
 def eval_func(**kwargs):
 
@@ -41,10 +42,11 @@ def eval_func(**kwargs):
     for key in config_space.keys():
         sample_instance[key] = kwargs[key]
 
-    if hints == "cray" and not are_cray_hints_valid(sample_instance, num_ranks, num_nodes):
+    if hints == "cray" and not are_cray_hints_valid(
+        sample_instance, num_ranks, num_nodes
+    ):
         print("Invalid hints combinations")
         return sys.float_info.max
-
 
     if ioflexset:
         set_hints_with_ioflex(sample_instance, config_path)
@@ -114,13 +116,12 @@ def eval_func(**kwargs):
         remove_path(f)
 
     print(f"Running config: {outline}")
-    
-    
+
     return objective
 
 
 def run(args=None):
-    
+
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--ioflex", action="store_true", default=False, help="Enable IOFlex"
@@ -192,18 +193,22 @@ def run(args=None):
         "--config",
         type=str,
         default=Path(__file__).parent.parent / "configs" / "tune_config_romio.json",
-        help="Path to JSON configuration file (default: ../configs/tune_config_romio.json"
-        
+        help="Path to JSON configuration file (default: ../configs/tune_config_romio.json",
     )
     args = vars(ap.parse_args(args))
 
-    global ioflexset, run_app, outfile, logisset, logfile_o, logfile_e, tune_bandwidth, files_to_clean, files_to_stripe
+    global num_ranks, num_nodes, ioflexset, run_app, outfile, logisset, logfile_o, logfile_e, tune_bandwidth, files_to_clean, files_to_stripe
     ioflexset = args["ioflex"]
     run_app = " ".join(args["cmd"])
-    outfile = open(args["outfile"], "w")
     tune_bandwidth = args["tune_bandwidth"]
 
-    global num_ranks, num_nodes
+    outfilepath = args["outfile"]
+    try:
+        outfile = open(outfilepath, "w")
+    except:
+        raise Exception("Cannot create file ", outfilepath)
+    outdir = os.path.dirname(os.path.abspath(outfilepath))
+
     num_ranks = args["num_ranks"]
     num_nodes = args["num_nodes"]
     max_trials = args["max_trials"]
@@ -224,7 +229,7 @@ def run(args=None):
     hints = args["with_hints"]
     config_path = args["config"]
 
-    CONFIG_MAP, files_to_clean, files_to_stripe  = get_config_map(hints, config_path)
+    CONFIG_MAP, files_to_clean, files_to_stripe = get_config_map(hints, config_path)
     config_space = {key: value for key, value in sorted(CONFIG_MAP.items()) if value}
 
     params = ng.p.Instrumentation(
@@ -254,11 +259,21 @@ def run(args=None):
     optimizer = ngoptimizer(parametrization=params, budget=max_trials)
     recommendation = optimizer.minimize(eval_func, verbosity=1)
     if tune_bandwidth:
-        print(f"Best Configuration: {recommendation.value[1]}, I/O Bandwidth MiB/s: {recommendation.loss*(-1)}")
+        print(
+            f"Best Configuration: {recommendation.value[1]}, I/O Bandwidth MiB/s: {recommendation.loss*(-1)}"
+        )
     else:
-        print(f"Best Configuration: {recommendation.value[1]}, ElapsedTime (s): {recommendation.loss}")
+        print(
+            f"Best Configuration: {recommendation.value[1]}, ElapsedTime (s): {recommendation.loss}"
+        )
+
+    bestpath = os.path.join(
+        outdir, os.path.basename(outfilepath).split(".")[0] + "_best_params.json"
+    )
+    with open(bestpath, "w") as f:
+        json.dump(recommendation.value[1], f, indent=4)
+
     outfile.close()
     if logisset:
         logfile_o.close()
         logfile_e.close()
-

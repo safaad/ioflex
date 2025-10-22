@@ -3,6 +3,7 @@
 # GP requires torch
 import os
 import time
+import json
 import argparse
 import shlex
 import subprocess
@@ -160,8 +161,8 @@ def run(args=None):
         "--outoptuna",
         "-o",
         type=str,
-        default="./optuna_study.pkl",
-        help="Path to Optuna Study output",
+        default="./optuna_study.db",
+        help="Path to Optuna Study output (db file format)",
     )
     ap.add_argument(
         "--num_ranks",
@@ -220,18 +221,22 @@ def run(args=None):
         "--config",
         type=str,
         default=Path(__file__).parent.parent / "configs" / "tune_config_romio.json",
-        help="Path to JSON configuration file (default: ../configs/tune_config_romio.json"
-        
+        help="Path to JSON configuration file (default: ../configs/tune_config_romio.json",
     )
     args = vars(ap.parse_args(args))
 
-    global ioflexset, run_app, outfile, logisset, logfile_o, logfile_e, hints, tune_bandwidth, files_to_clean, files_to_stripe
+    global num_ranks, num_nodes, ioflexset, run_app, outfile, logisset, logfile_o, logfile_e, hints, tune_bandwidth, files_to_clean, files_to_stripe
     ioflexset = args["ioflex"]
     run_app = " ".join(args["cmd"])
     tune_bandwidth = args["tune_bandwidth"]
-    outfile = open(args["outfile"], "w")
 
-    global num_ranks, num_nodes
+    outfilepath = args["outfile"]
+    try:
+        outfile = open(outfilepath, "w")
+    except:
+        raise Exception("Cannot create file ", outfilepath)
+    outdir = os.path.dirname(os.path.abspath(outfilepath))
+
     num_ranks = args["num_ranks"]
     num_nodes = args["num_nodes"]
 
@@ -248,7 +253,7 @@ def run(args=None):
     hints = args["with_hints"]
     config_path = args["config"]
 
-    CONFIG_MAP, files_to_clean, files_to_stripe  = get_config_map(hints, config_path)
+    CONFIG_MAP, files_to_clean, files_to_stripe = get_config_map(hints, config_path)
     config_space = {key: value for key, value in sorted(CONFIG_MAP.items()) if value}
     header_items = list(config_space.keys())
 
@@ -274,12 +279,17 @@ def run(args=None):
             pruner=pruner,
             study_name="ioflexoptuna_study",
         )
-
     study.optimize(
         lambda trial: eval_func(trial, config_space, model), n_trials=args["max_trials"]
     )
 
-    print(f"Best trial: {study.best_trial}")
+    print(f"Best trial: {study.best_trial.params}")
+
+    bestpath = os.path.join(
+        outdir, os.path.basename(outfilepath).split(".")[0] + "_best_params.json"
+    )
+    with open(bestpath, "w") as f:
+        json.dump(study.best_trial.params, f, indent=4)
     joblib.dump(study, args["outoptuna"])
 
     outfile.close()

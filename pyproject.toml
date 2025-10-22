@@ -16,15 +16,8 @@ requires-python = ">=3.8"
 dependencies = [
     "joblib>=1.4.2",
     "nevergrad>=1.0.12",
-    "numpy>=2.3.2",
     "optuna>=4.3.0",
-    "pandas>=2.3.1",
-    "ray>=2.47.1",
-    "scikit_learn>=1.7.1",
-    "ax-platform==0.3.0",
-    "scipy>=1.16.1",
     "tqdm>=4.67.1",
-    "xgboost>=3.0.4",
 ]
 
 classifiers = [
@@ -42,7 +35,19 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-profiling = ["darshan==3.4.7.0"]
+profiling = ["darshan>=3.7.0"]
+predicting = [
+    "numpy>=2.3.2",
+    "pandas>=2.3.1",
+    "scikit_learn>=1.7.1",
+    "scipy>=1.16.1",
+    "xgboost>=3.0.4"
+]
+raytune = [
+    "ray>=2.47.1",
+    "ax-platform==0.3.0",
+    "hpbandster"
+]
 
 [tool.setuptools.packages.find]
 include = ["ioflex*"]

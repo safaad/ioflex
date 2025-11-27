@@ -161,8 +161,8 @@ def run(args=None):
         "--outoptuna",
         "-o",
         type=str,
-        default="./optuna_study.db",
-        help="Path to Optuna Study output (db file format)",
+        default="./optuna_study.pkl",
+        help="Path to Optuna Study output",
     )
     ap.add_argument(
         "--num_ranks",

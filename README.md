@@ -1,9 +1,8 @@
 # IOFlex
 
-IOFlex is a portable I/O tuning framework designed to efficiently optimize I/O performance and automatically tune I/O configurations for HPC (High-Performance Computing) applications.
-
-IOFlex Consists of two main component (i) IOFlex I/O wrapper library and (ii) IOFlex I/O Tune library.
-
+IOFlex a framework designed for efficient optimization and auto-tuning of I/O configurations in HPC applications. IOFlex
+consists of two main components: the I/O wrapper library and the IOFlex I/O Tune 
+library
 ## Table of Contents
 
 - [Features](#features)

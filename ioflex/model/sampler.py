@@ -4,7 +4,7 @@ import time
 import argparse
 import shlex
 import subprocess
-import logging
+from pathlib import Path
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -13,26 +13,24 @@ from scipy.stats import qmc
 import ioflex.model.parser as parser
 import glob
 from tqdm.auto import tqdm
+from ioflex.common import SAMPLER_MAP, PRUNER_MAP
+from ioflex.common import (
+    get_config_map,
+    set_hints_with_ioflex,
+    set_hints_env_romio,
+    set_hints_env_cray,
+    are_cray_hints_valid,
+    get_bandwidth_darshan,
+    remove_path,
+)
 
-
-from ioflex.common import get_config_map
 from ioflex.striping import setstriping
 
-def configure_logging():
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
-    return logging.getLogger(__name__)
 
-
-logger = configure_logging()
-
-files_to_clean = []
-files_to_stripe = []
-
-
-def generate_lhs_samples(param_grid, nsamples):
+def generate_lhs_samples(config_space, nsamples):
+    
+    param_keys = config_space.keys()
+    param_grid = config_space.values()
     n_dims = len(param_grid)
     lhs = qmc.LatinHypercube(d=n_dims)
     lhs_samples = lhs.random(n=nsamples)
@@ -43,25 +41,130 @@ def generate_lhs_samples(param_grid, nsamples):
         for j, param_values in enumerate(param_grid):
             index = int(np.floor(lhs_samples[i, j] * len(param_values)))
             sampled_config.append(param_values[index])
-        sampled_configs.append(sampled_config)
+        sampled_configs.append(dict(zip(param_keys, sampled_config)))
 
     return sampled_configs
 
 
+def eval_runs(samples_config, nsamples):
+
+    dir_path = os.environ.get("PWD", os.getcwd())
+    config_path = os.path.join(dir_path, "config.conf" if ioflexset else "romio-hints")
+
+    for i in range(nsamples):
+        sample_instance = samples_config[i]
+        if hints == "cray":
+            # if options are not valid skip the trial
+            if not are_cray_hints_valid(sample_instance, num_ranks, num_nodes):
+                print("Skipped instance")
+                continue
+
+        if ioflexset:
+            set_hints_with_ioflex(sample_instance, config_path)
+            os.environ["IOFLEX_HINTS"] = config_path
+        else:
+            if hints == "romio":
+                set_hints_env_romio(sample_instance, config_path)
+                os.environ["ROMIO_HINTS"] = config_path
+            if hints == "cray":
+                crayhints = set_hints_env_cray(sample_instance)
+                os.environ["MPICH_MPIIO_HINTS"] = crayhints
+            # if hints == "ompio":
+            #  TODO
+
+        configs_str = ",".join(map(str, sample_instance.values()))
+        stripe_count = (
+            int(sample_instance["striping_factor"])
+            if "striping_factor" in sample_instance
+            else 8
+        )
+        stripe_size = (
+            str(sample_instance["striping_unit"] // 1048576) + "M"
+            if "striping_unit" in sample_instance
+            else "1M"
+        )
+        # Set striping with lfs setstripe
+        for f in files_to_stripe:
+            setstriping(f, stripe_count, stripe_size)
+
+        start_time = time.time()
+        process = subprocess.Popen(
+            shlex.split(run_app),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            shell=False,
+            cwd=os.getcwd(),
+        )
+        out, err = process.communicate()
+        objective = time.time() - start_time
+
+        outline = f"{configs_str},{objective}"
+        if tune_bandwidth:
+            darshan_dir = os.environ["DARSHAN_LOG_DIR_PATH"]
+            log_path = os.path.join(darshan_dir, "*.darshan")
+            # get MPI-IO bandwidth MiB/s
+            objective = get_bandwidth_darshan(log_path, "MPI-IO")
+            if objective == -1:
+                print("Invalid Run")
+                continue
+            outline = f"{outline},{objective}\n"
+
+        outfile.write(outline)
+
+        if logisset:
+            logfile_o.write(f"Config: {outline}\n\n{out.decode()}\n")
+            logfile_e.write(f"Config: {outline}\n\n{err.decode()}\n")
+
+        for f in files_to_clean:
+            remove_path(f)
+
+        print(f"Running config: {outline}")
+
+
 def run(args=None):
-    ap = argparse.ArgumentParser(add_help=True)
+
+    ap = argparse.ArgumentParser(prog="ioflex model --sample")
     ap.add_argument(
         "--ioflex", action="store_true", default=False, help="Enable IOFlex"
     )
     ap.add_argument(
-        "--outfile", type=str, default="./lhssampledruns.csv", help="Path to Output"
+        "--outfile",
+        type=str,
+        default="./OutLHSsampler.csv",
+        help="Path to output CSV file",
     )
-    ap.add_argument("--app_name", type=str, required=True, help="Application Name")
-    ap.add_argument("--num_nodes", type=int, required=True, help="Number of nodes")
-    ap.add_argument("--nsamples", type=int, default=50, help="Number of samples")
     ap.add_argument(
-        "--mpi_procs", type=int, required=True, help="Number of MPI processes per node"
+        "--num_ranks",
+        "-np",
+        type=int,
+        required=True,
+        help="Number of ranks used to run the program",
     )
+    ap.add_argument(
+        "--num_nodes", "-n", type=int, required=True, help="Number of nodes allocated"
+    )
+    ap.add_argument(
+        "--with_hints",
+        type=str,
+        default="romio",
+        help="MPIIO hints mode",
+        choices=["romio", "cray", "ompio"],
+    )
+    ap.add_argument(
+        "-b",
+        "--tune_bandwidth",
+        action="store_true",
+        default=False,
+        help="Use I/O bandwidth as the tuning objective",
+    )
+    ap.add_argument(
+        "--config",
+        type=str,
+        default=Path(__file__).parent.parent / "configs" / "tune_config_romio.json",
+        help="Path to JSON configuration file (default: ../configs/tune_config_romio.json",
+    )
+    ap.add_argument("--nsamples", type=int, default=50, help="Number of samples")
+
     ap.add_argument(
         "--darshan_path", type=str, default=None, help="Path to Darshan output"
     )
@@ -76,26 +179,23 @@ def run(args=None):
         nargs="*",
         help="Application command line",
     )
-    ap.add_argument(
-        "--with_hints",
-        type=str,
-        default="romio",
-        help="MPIIO hints mode",
-        choices=["romio", "cray", "ompio"],
-    )
-    args = vars(ap.parse_args())
+    args = vars(ap.parse_args(args))
+
+    global num_ranks, num_nodes, ioflexset, run_app, outfile, logisset, logfile_o, logfile_e, hints, tune_bandwidth, files_to_clean, files_to_stripe
     ioflexset = args["ioflex"]
     run_app = " ".join(args["cmd"])
-    outfile = args["outfile"]
+    tune_bandwidth = args["tune_bandwidth"]
 
+    outfilepath = args["outfile"]
+    try:
+        outfile = open(outfilepath, "w")
+    except:
+        raise Exception("Cannot create file ", outfilepath)
 
-    hints = args["with_hints"]
-    CONFIG_MAP = get_config_map(hints)
-    sampled_configs = generate_lhs_samples(
-        list(v for v in CONFIG_MAP.values() if v), args["nsamples"]
-    )
-    logger.info(f"Number of samples: {len(sampled_configs)}")
-    print(sampled_configs)
+    num_ranks = args["num_ranks"]
+    num_nodes = args["num_nodes"]
+    nsamples = args["nsamples"]
+
     logisset = bool(args["with_log_path"])
     if logisset:
         os.makedirs(args["with_log_path"], exist_ok=True)
@@ -103,99 +203,30 @@ def run(args=None):
         logfile_o = open(os.path.join(args["with_log_path"], f"out.{timestamp}"), "w")
         logfile_e = open(os.path.join(args["with_log_path"], f"err.{timestamp}"), "w")
 
-    df = pd.DataFrame()
+    # Define configurations mappings
+    hints = args["with_hints"]
+    config_path = args["config"]
 
-    cols = ("appname", "num_nodes", "mpi_procs", "runtime")
-    cols += tuple(str(key) for key in CONFIG_MAP.keys() if CONFIG_MAP[key])
+    CONFIG_MAP, files_to_clean, files_to_stripe = get_config_map(hints, config_path)
+    config_space = {key: value for key, value in sorted(CONFIG_MAP.items()) if value}
+    header_items = list(config_space.keys())
 
-    iodict = {key: [] for key in cols}
-    dictdarshan = {}
-    for solution in tqdm(sampled_configs):
+    header_items.append("elapsedtime")
+    if args["tune_bandwidth"]:
+        header_items.append("I/O-Bandwidth-Mib/s")
 
-        iodict["appname"].append(args["app_name"])
-        iodict["num_nodes"].append(args["num_nodes"])
-        iodict["mpi_procs"].append(args["mpi_procs"])
-        config_path = os.path.join(
-            os.getcwd(), "config.conf" if ioflexset else "romio-hints"
-        )
-        with open(config_path, "w") as config_file:
-            config_entries = []
-            for key, values in CONFIG_MAP.items():
+    outfile.write(",".join(header_items) + "\n")
 
-                if not values:
-                    continue
+    # Get Samples Configuration
+    samples_config = generate_lhs_samples(
+        config_space,
+        nsamples,
+    )
 
-                selected_val = solution[
-                    list(k for k in CONFIG_MAP.keys() if CONFIG_MAP[k]).index(key)
-                ]
-                separator = " = " if ioflexset else " "
+    # Run with Samples
+    eval_runs(samples_config, nsamples)
 
-                config_entries.append(str(selected_val))
-                iodict[key].append(selected_val)
-
-                match key:
-                    case "striping_factor":
-                        stripe_count = int(selected_val)
-                    case "striping_unit":
-                        stripe_size = str(selected_val // 1048576) + "M"
-                        config_file.write(f"cb_buffer_size{separator}{selected_val}\n")
-                    case "romio_filesystem_type":
-                        os.environ.update({"ROMIO_FSTYPE_FORCE": selected_val})
-                    case "cb_config_list":
-                        if ioflexset:
-                            config_file.write(f'{key}{separator}"{selected_val}"\n')
-                            continue
-                config_file.write(f"{key}{separator}{selected_val}\n")
-
-        configs_str = ",".join(config_entries)
-        if not ioflexset:
-            os.environ["ROMIO_HINTS"] = config_path
-        else:
-            os.environ["IOFLEX_HINTS"] = config_path
-
-        # Set striping with lfs setstripe
-        for f in files_to_stripe:
-            setstriping(f, stripe_count, stripe_size)
-
-        starttime = time.time()
-        process = subprocess.Popen(
-            shlex.split(run_app),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            shell=False,
-            cwd=os.getcwd(),
-        )
-        out, err = process.communicate()
-        elapsedtime = time.time() - starttime
-        iodict["runtime"].append(elapsedtime)
-
-        if logisset:
-            logfile_o.write(f"Config: {configs_str}\n\n{out.decode()}\n")
-            logfile_e.write(f"Config: {configs_str}\n\n{err.decode()}\n")
-
-        if args["darshan_path"]:
-            logfile = os.path.join(args["darshan_path"], "*.darshan")
-            for f in glob.glob(logfile):
-                localdictdarshan = parser.parsedarshan(f)
-                if not dictdarshan:
-                    dictdarshan = {key: [] for key in localdictdarshan.keys()}
-
-                for key, value in localdictdarshan.items():
-                    dictdarshan[key].append(value)
-                os.remove(f)
-
-        for f in files_to_clean:
-            if os.path.exists(f):
-                os.remove(f) if os.path.isfile(f) else rmtree(f)
-
-    iodict = iodict | dictdarshan
-    df = pd.DataFrame.from_dict(iodict)
-    df.to_csv(outfile, index=False)
-
+    outfile.close()
     if logisset:
         logfile_o.close()
         logfile_e.close()
-
-
-if __name__ == "__main__":
-    run()

@@ -13,7 +13,7 @@ import logging
 from datetime import datetime
 import optuna
 from ioflex.model import base
-from ioflex.common import SAMPLER_MAP, PRUNER_MAP
+from ioflex.common import SAMPLER_MAP
 from ioflex.common import (
     get_config_map,
     set_hints_with_ioflex,
@@ -40,16 +40,6 @@ def get_sampler(sampler_name, config_space=None):
     return sampler_class() if sampler_name != "grid" else sampler_class(config_space)
 
 
-def get_pruner(pruner_name):
-
-    if pruner_name not in PRUNER_MAP:
-        logging.warning(f"Invalid pruner '{pruner_name}'. Using NopPruner by default.")
-        return optuna.pruners.NopPruner()
-
-    logging.info(f"Using {pruner_name} pruner.")
-    return PRUNER_MAP[pruner_name]()
-
-
 # Default ROMIO Configuration
 def eval_func(
     trial,
@@ -67,10 +57,10 @@ def eval_func(
         selected_val = trial.suggest_categorical(key, values)
         sample_instance[key] = selected_val
 
-    if hints == "cray":
+    if hints == "cray" and enable_pruning:
         # if options are not valid skip the trial
         if not are_cray_hints_valid(sample_instance, num_ranks, num_nodes):
-
+            print("Invalid combination of cray hints")
             raise TrialPruned()
 
     if ioflexset:
@@ -120,6 +110,9 @@ def eval_func(
         # get MPI-IO bandwidth MiB/s
         objective = get_bandwidth_darshan(log_path, "MPI-IO")
         if objective == -1:
+            print(
+                "Darshan file wasn't properly generated. Check the Darshan settings or the application correctness"
+            )
             raise TrialPruned()
         outline = f"{outline},{objective}"
     if model:
@@ -191,17 +184,17 @@ def run(args=None):
         help="Optuna sampler",
     )
     ap.add_argument(
-        "--pruner",
-        type=str,
-        choices=["hyper", "median", "successivehalving", "nop"],
-        default="nop",
-        help="Optuna pruner",
+        "-p",
+        "--enable-pruning",
+        action="store_true",
+        default=False,
+        help="Enable pruning invalid configurations or non-promising runs",
     )
     ap.add_argument(
         "--with_log_path", type=str, default=None, help="Output logging path"
     )
     ap.add_argument(
-        "--with_model", type=str, default=None, help="Path to trained prediction model"
+        "--with_model", type=str, default=None, help="Path to trained model"
     )
     ap.add_argument(
         "--with_hints",
@@ -225,7 +218,7 @@ def run(args=None):
     )
     args = vars(ap.parse_args(args))
 
-    global num_ranks, num_nodes, ioflexset, run_app, outfile, logisset, logfile_o, logfile_e, hints, tune_bandwidth, files_to_clean, files_to_stripe
+    global num_ranks, num_nodes, ioflexset, run_app, outfile, logisset, logfile_o, logfile_e, hints, tune_bandwidth, files_to_clean, files_to_stripe, enable_pruning
     ioflexset = args["ioflex"]
     run_app = " ".join(args["cmd"])
     tune_bandwidth = args["tune_bandwidth"]
@@ -239,6 +232,7 @@ def run(args=None):
 
     num_ranks = args["num_ranks"]
     num_nodes = args["num_nodes"]
+    enable_pruning = args["enable-pruning"]
 
     model = joblib.load(args["with_model"]) if args["with_model"] else None
 
@@ -267,7 +261,6 @@ def run(args=None):
     outfile.write(",".join(header_items) + "\n")
 
     sampler = get_sampler(args["sampler"], config_space)
-    pruner = get_pruner(args["pruner"])
 
     if args["inoptuna"]:
         study = joblib.load(args["inoptuna"])
@@ -276,7 +269,6 @@ def run(args=None):
         study = optuna.create_study(
             direction=direction,
             sampler=sampler,
-            pruner=pruner,
             study_name="ioflexoptuna_study",
         )
     study.optimize(

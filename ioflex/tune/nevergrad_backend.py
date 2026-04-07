@@ -9,8 +9,6 @@ import json
 import joblib
 from pathlib import Path
 from datetime import datetime
-from shutil import rmtree
-import sys
 from ioflex.model import base
 from ioflex.common import (
     get_config_map,
@@ -23,6 +21,8 @@ from ioflex.common import (
     OPTIMIZER_MAP,
 )
 from ioflex.striping import setstriping
+
+PENALTY_SCORE = 1e6
 
 
 def get_optimizer(optimizer_name):
@@ -42,11 +42,11 @@ def eval_func(**kwargs):
     for key in config_space.keys():
         sample_instance[key] = kwargs[key]
 
-    if hints == "cray" and not are_cray_hints_valid(
+    if enable_pruning and hints == "cray" and not are_cray_hints_valid(
         sample_instance, num_ranks, num_nodes
     ):
         print("Invalid hints combinations")
-        return sys.float_info.max
+        return PENALTY_SCORE
 
     if ioflexset:
         set_hints_with_ioflex(sample_instance, config_path)
@@ -95,8 +95,10 @@ def eval_func(**kwargs):
         # get MPI-IO bandwidth MiB/s
         objective = get_bandwidth_darshan(log_path, "MPI-IO")
         if objective == -1:
-            print("Error Empty Darshan File")
-            return sys.float_info.max
+            print(
+                "Darshan file wasn't properly generated. Check the Darshan settings or the application correctness"
+            )
+            return PENALTY_SCORE
         outline = f"{outline},{objective}"
         # Transform maximization to minimization problem for bandwidth
         objective = objective * -1
@@ -183,6 +185,13 @@ def run(args=None):
         choices=["romio", "cray", "ompio"],
     )
     ap.add_argument(
+        "-p",
+        "--enable-pruning",
+        action="store_true",
+        default=False,
+        help="Enable pruning invalid configurations or non-promising runs",
+    )
+    ap.add_argument(
         "-b",
         "--tune_bandwidth",
         action="store_true",
@@ -197,11 +206,12 @@ def run(args=None):
     )
     args = vars(ap.parse_args(args))
 
-    global num_ranks, num_nodes, ioflexset, run_app, outfile, logisset, logfile_o, logfile_e, tune_bandwidth, files_to_clean, files_to_stripe
+    global num_ranks, num_nodes, ioflexset, run_app, outfile, logisset, logfile_o, logfile_e, tune_bandwidth, files_to_clean, files_to_stripe, enable_pruning
     ioflexset = args["ioflex"]
     run_app = " ".join(args["cmd"])
     tune_bandwidth = args["tune_bandwidth"]
 
+    enable_pruning = args["enable-pruning"]
     outfilepath = args["outfile"]
     try:
         outfile = open(outfilepath, "w")
@@ -259,6 +269,7 @@ def run(args=None):
     optimizer = ngoptimizer(parametrization=params, budget=max_trials)
     recommendation = optimizer.minimize(eval_func, verbosity=1)
     if tune_bandwidth:
+        print(recommendation)
         print(
             f"Best Configuration: {recommendation.value[1]}, I/O Bandwidth MiB/s: {recommendation.loss*(-1)}"
         )

@@ -33,8 +33,12 @@ def main():
             from .model import sampler
             sampler_args = sys.argv[sys.argv.index("--sample") + 1 :]
             sampler.run(sampler_args)
+        elif "--predict" in sys.argv:
+            from .model import predict
+            predict_args = sys.argv[sys.argv.index("--predict") + 1 :]
+            predict.run(predict_args)
         else:
-           print("Please specify a subcommand: --train or --sample") 
+           print("Please specify a subcommand: --train, --sample, or --predict") 
     else:
         print(f"Unknown command: {command}")
 

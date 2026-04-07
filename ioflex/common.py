@@ -176,6 +176,7 @@ def set_hints_env_cray(config_dict):
 def are_cray_hints_valid(config_dict, num_ranks, num_nodes):
 
     keys = config_dict.keys()
+
     # The combination of these configurations isn't valid
     if (
         "cray_cb_write_lock_mode" in keys

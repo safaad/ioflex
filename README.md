@@ -1,8 +1,9 @@
 # IOFlex
 
 IOFlex a framework designed for efficient optimization and auto-tuning of I/O configurations in HPC applications. IOFlex
-consists of two main components: the I/O wrapper library and the IOFlex I/O Tune 
+consists of two main components: the I/O wrapper library and the IOFlex I/O Tune
 library
+
 ## Table of Contents
 
 - [Features](#features)
@@ -108,7 +109,7 @@ usage: ioflex tune --optuna [-h] [--ioflex] [--outfile OUTFILE] [--inoptuna INOP
                             [--outoptuna OUTOPTUNA] --num_ranks NUM_RANKS --num_nodes NUM_NODES --cmd
                             [CMD ...] [--max_trials MAX_TRIALS]
                             [--sampler {tpe,rand,gp,nsga,brute,grid,auto}]
-                            [--pruner {hyper,median,successivehalving,nop}] [--with_log_path WITH_LOG_PATH]
+                            [--enable_pruning] [--with_log_path WITH_LOG_PATH]
                             [--with_model WITH_MODEL] [--with_hints {romio,cray,ompio}] [-b] [--config CONFIG]
 ```
 
@@ -131,8 +132,7 @@ Options:
                         Max number of trials
   --sampler {tpe,rand,gp,nsga,brute,grid,auto}
                         Optuna sampler
-  --pruner {hyper,median,successivehalving,nop}
-                        Optuna pruner
+  -p, --enable_pruning  Enable pruning invalid configurations or non-promising runs
   --with_log_path WITH_LOG_PATH
                         Output logging path
   --with_model WITH_MODEL
@@ -194,7 +194,7 @@ options:
 usage: ioflex tune --nevergrad [-h] [--ioflex] [--outfile OUTFILE] [--inng INNG] [--outng OUTNG] --num_ranks NUM_RANKS
                    --num_nodes NUM_NODES --cmd [CMD ...] [--max_trials MAX_TRIALS]
                    [--optimizer {ngioh,twopde,pdopo,tbpsa,ngopt}] [--with_log_path WITH_LOG_PATH]
-                   [--with_model WITH_MODEL] [--with_hints {romio,cray,ompio}] [-b] [--config CONFIG]
+                   [--with_model WITH_MODEL] [--with_hints {romio,cray,ompio}] [--enable_pruning] [-b] [--config CONFIG]
 ```
 
 Options
@@ -222,6 +222,7 @@ Options
                         Path to trained prediction model
   --with_hints {romio,cray,ompio}
                         MPIIO hints mode
+  -p, --enable_pruning  Enable pruning invalid configurations or non-promising runs
   -b, --tune_bandwidth  Use I/O bandwidth as the tuning objective
   --config CONFIG       Path to JSON configuration file (default: ../configs/tune_config_romio.json
 ```

@@ -186,7 +186,7 @@ def run(args=None):
     )
     ap.add_argument(
         "-p",
-        "--enable-pruning",
+        "--enable_pruning",
         action="store_true",
         default=False,
         help="Enable pruning invalid configurations or non-promising runs",
@@ -211,7 +211,7 @@ def run(args=None):
     run_app = " ".join(args["cmd"])
     tune_bandwidth = args["tune_bandwidth"]
 
-    enable_pruning = args["enable-pruning"]
+    enable_pruning = args["enable_pruning"]
     outfilepath = args["outfile"]
     try:
         outfile = open(outfilepath, "w")

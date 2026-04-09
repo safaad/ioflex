@@ -185,7 +185,7 @@ def run(args=None):
     )
     ap.add_argument(
         "-p",
-        "--enable-pruning",
+        "--enable_pruning",
         action="store_true",
         default=False,
         help="Enable pruning invalid configurations or non-promising runs",
@@ -232,7 +232,7 @@ def run(args=None):
 
     num_ranks = args["num_ranks"]
     num_nodes = args["num_nodes"]
-    enable_pruning = args["enable-pruning"]
+    enable_pruning = args["enable_pruning"]
 
     model = joblib.load(args["with_model"]) if args["with_model"] else None
 

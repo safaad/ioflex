@@ -18,13 +18,6 @@ SAMPLER_MAP = {
     "tpe": ("TPE Sampler", optuna.samplers.TPESampler),
 }
 
-PRUNER_MAP = {
-    "median": optuna.pruners.MedianPruner,
-    "hyper": optuna.pruners.HyperbandPruner,
-    "successivehalving": optuna.pruners.SuccessiveHalvingPruner,
-    "nop": optuna.pruners.NopPruner,
-}
-
 # NNEVERGRAD SPECIFIC
 OPTIMIZER_MAP = {
     "ngioh": ("NgIohTuned", ng.optimizers.NgIoh),
@@ -98,6 +91,7 @@ def get_config_map(hints, config_path):
         if key == "files_to_clean" or key == "files_to_stripe":
             continue
         if key not in CONFIG_KEY:
+            print(key)
             raise KeyError("Invalid or unsupported hint")
         CONFIG_MAP[key] = values
     
@@ -173,45 +167,90 @@ def set_hints_env_cray(config_dict):
     return ":".join(map(str, crayhints))
 
 
-def are_cray_hints_valid(config_dict, num_ranks, num_nodes):
+def compute_num_aggregators(config_dict, num_ranks, num_nodes):
+    """Deduce the effective num of aggregators given multiple IO configurations
 
-    keys = config_dict.keys()
+    Args:
+        config_dict
+        num_ranks
+        num_nodes
+    Returns:
+        dict: config_dict
+    """
+    cb_multi  = config_dict.get("cray_cb_nodes_multiplier", 1)
+    sf        = config_dict.get("striping_factor")
+    cb_nodes  = config_dict.get("cb_nodes")
+    ccl       = config_dict.get("cb_config_list")
 
-    # The combination of these configurations isn't valid
-    if (
-        "cray_cb_write_lock_mode" in keys
-        and config_dict["cray_cb_write_lock_mode"] == 1
-    ):
-        if "romio_no_indep_rw" in keys and config_dict["romio_no_indep_rw"] == "false":
-            return False
-        if (
-            "romio_cb_write" in keys and config_dict["romio_cb_write"] == "disable"
-        ) or ("romio_cb_read" in keys and config_dict["romio_cb_read"] == "disable"):
-            return False
+    num_aggs = cb_nodes
+    if cb_nodes is not None:
+        if ccl is not None:
+            ppn = int(ccl.split(":")[1]) if ccl.split(":")[1] != "*" else num_ranks//num_nodes
+            ccl_effective = ppn * num_nodes
 
-    cb_multi = (
-        config_dict["cray_cb_nodes_multiplier"]
-        if "cray_cb_nodes_multiplier" in keys
-        else 1
-    )
-    cb_nodes = (
-        config_dict["striping_factor"] * cb_multi
-        if "striping_factor" in keys
-        else config_dict["cb_nodes"]
-    )
-    if cb_nodes > num_ranks:
-        return False
+            if ccl_effective > cb_nodes and ccl_effective < num_ranks:
+                num_aggs = cb_nodes    
+            elif cb_nodes > ccl_effective and num_ranks > cb_nodes:
+                num_aggs = ccl_effective
+            elif ccl_effective > num_ranks and cb_nodes < num_ranks:
+                num_aggs = cb_nodes
+            else:
+                num_aggs = num_ranks
+        elif cb_nodes < num_ranks:
+            num_aggs = cb_nodes
+        else:
+            num_aggs = num_ranks
+    else:
+        
+        if ccl is not None and sf is not None and sf != -1:
+            ppn = int(ccl.split(":")[1]) if ccl.split(":")[1] != "*" else num_ranks//num_nodes
+            ccl_effective = ppn * num_nodes
+            
+            sf_effective = sf * cb_multi
+            num_aggs = min(ccl_effective, sf_effective, num_ranks)
+        elif ccl is not None:
+            ppn = int(ccl.split(":")[1]) if ccl.split(":")[1] != "*" else num_ranks//num_nodes
+            ccl_effective = ppn * num_nodes
+             
+            num_aggs = min(ccl_effective, num_ranks)
+        elif sf is not None and sf != -1:
+            sf_effective = sf * cb_multi
+            num_aggs = min(sf_effective, num_ranks)
+        else:
+            num_aggs = num_ranks
+    return num_aggs
 
-    # if "cb_config_list" in keys and "striping_factor" in keys:
+def repair_cray_hints_valid(config_dict, num_ranks, num_nodes):
+    """Validates Cray MPI-IO hint combinations
 
-    #     cb_ppn = int(config_dict["cb_config_list"].split(":")[1]) if config_dict["cb_config_list"].split(":")[1] != "*" else num_ranks//num_nodes
+    Args:
+        config_dict
+        num_ranks
+        num_nodes
 
-    #     cb_nodes = config_dict["striping_factor"] * cb_multi
+    Returns:
+        bool: valid
+        str: Reason for invalidation
+    """
 
-    #     if min(cb_nodes, cb_ppn*num_nodes) > num_ranks:
-    #         return False
+    # cray_cb_write_lock_mode conflicts        
+    if config_dict.get("cray_cb_write_lock_mode") == 1:
+        if config_dict.get("romio_no_indep_rw") == "false":
+            config_dict["cray_cb_write_lock_mode"] = 0
+            print("Updated cray_cb_write_lock_mode=0")
+        if config_dict.get("romio_cb_write") == "disable" or config_dict.get("romio_cb_read") == "disable":
+            config_dict["cray_cb_write_lock_mode"] = 0
+            config_dict["romio_no_indep_rw"] = "false"
+            print("Updated cray_cb_write_lock_mode=0")
 
-    return True
+    # romio_no_indep_rw needs both collective buffering enabled
+    if config_dict.get("romio_no_indep_rw") == "true":
+        if config_dict.get("romio_cb_read") == "disable" or config_dict.get("romio_cb_write") == "disable":
+            config_dict["romio_no_indep_rw"] = "false"
+            print("Updated romio_no_indep_rw=false")
+
+    config_dict["cb_nodes"] = compute_num_aggregators(config_dict, num_ranks, num_nodes)
+    
 
 
 def get_bandwidth_darshan(log_path, mod):
@@ -234,8 +273,6 @@ def get_bandwidth_darshan(log_path, mod):
     os.remove(log_file)
 
     return bandwidth_slowest
-
-
 def remove_path(path_pattern: str):
 
     matches = glob.glob(path_pattern, recursive=True)

@@ -19,7 +19,7 @@ from ioflex.common import (
     set_hints_with_ioflex,
     set_hints_env_romio,
     set_hints_env_cray,
-    are_cray_hints_valid,
+    repair_cray_hints_valid,
     get_bandwidth_darshan,
     remove_path,
 )
@@ -45,6 +45,7 @@ def eval_func(
     trial,
     config,
     model=None,
+    max_retries: int = 20,
 ):
 
     dir_path = os.environ.get("PWD", os.getcwd())
@@ -54,14 +55,15 @@ def eval_func(
     for key, values in config.items():
         if not values:
             continue
-        selected_val = trial.suggest_categorical(key, values)
-        sample_instance[key] = selected_val
+        sample_instance[key] = trial.suggest_categorical(key, values)
 
     if hints == "cray" and enable_pruning:
-        # if options are not valid skip the trial
-        if not are_cray_hints_valid(sample_instance, num_ranks, num_nodes):
-            print("Invalid combination of cray hints")
-            raise TrialPruned()
+        # valid, reason = are_cray_hints_valid(sample_instance, num_ranks, num_nodes)
+        repair_cray_hints_valid(sample_instance, num_ranks, num_nodes)
+        
+        # if not are_cray_hints_valid(sample_instance, num_ranks, num_nodes):
+        #     print("Invalid combination of cray hints")
+        #     raise TrialPruned()
 
     if ioflexset:
         set_hints_with_ioflex(sample_instance, config_path)

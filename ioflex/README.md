@@ -132,7 +132,6 @@ Options:
                         Max number of trials
   --sampler {tpe,rand,gp,nsga,brute,grid,auto}
                         Optuna sampler
-  -p, --enable_pruning  Enable pruning invalid configurations or non-promising runs
   --with_log_path WITH_LOG_PATH
                         Output logging path
   --with_model WITH_MODEL
@@ -222,7 +221,6 @@ Options
                         Path to trained prediction model
   --with_hints {romio,cray,ompio}
                         MPIIO hints mode
-  -p, --enable_pruning  Enable pruning invalid configurations or non-promising runs
   -b, --tune_bandwidth  Use I/O bandwidth as the tuning objective
   --config CONFIG       Path to JSON configuration file (default: ../configs/tune_config_romio.json
 ```

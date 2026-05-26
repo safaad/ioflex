@@ -57,14 +57,9 @@ def eval_func(
             continue
         sample_instance[key] = trial.suggest_categorical(key, values)
 
-    if hints == "cray" and enable_pruning:
-        # valid, reason = are_cray_hints_valid(sample_instance, num_ranks, num_nodes)
+    if hints == "cray":    
         repair_cray_hints_valid(sample_instance, num_ranks, num_nodes)
-        
-        # if not are_cray_hints_valid(sample_instance, num_ranks, num_nodes):
-        #     print("Invalid combination of cray hints")
-        #     raise TrialPruned()
-
+    
     if ioflexset:
         set_hints_with_ioflex(sample_instance, config_path)
         os.environ["IOFLEX_HINTS"] = config_path
@@ -186,13 +181,6 @@ def run(args=None):
         help="Optuna sampler",
     )
     ap.add_argument(
-        "-p",
-        "--enable_pruning",
-        action="store_true",
-        default=False,
-        help="Enable pruning invalid configurations or non-promising runs",
-    )
-    ap.add_argument(
         "--with_log_path", type=str, default=None, help="Output logging path"
     )
     ap.add_argument(
@@ -220,7 +208,7 @@ def run(args=None):
     )
     args = vars(ap.parse_args(args))
 
-    global num_ranks, num_nodes, ioflexset, run_app, outfile, logisset, logfile_o, logfile_e, hints, tune_bandwidth, files_to_clean, files_to_stripe, enable_pruning
+    global num_ranks, num_nodes, ioflexset, run_app, outfile, logisset, logfile_o, logfile_e, hints, tune_bandwidth, files_to_clean, files_to_stripe
     ioflexset = args["ioflex"]
     run_app = " ".join(args["cmd"])
     tune_bandwidth = args["tune_bandwidth"]
@@ -234,7 +222,6 @@ def run(args=None):
 
     num_ranks = args["num_ranks"]
     num_nodes = args["num_nodes"]
-    enable_pruning = args["enable_pruning"]
 
     model = joblib.load(args["with_model"]) if args["with_model"] else None
 

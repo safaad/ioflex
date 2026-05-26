@@ -188,11 +188,11 @@ def compute_num_aggregators(config_dict, num_ranks, num_nodes):
             ppn = int(ccl.split(":")[1]) if ccl.split(":")[1] != "*" else num_ranks//num_nodes
             ccl_effective = ppn * num_nodes
 
-            if ccl_effective > cb_nodes and ccl_effective < num_ranks:
+            if ccl_effective > cb_nodes and ccl_effective <= num_ranks:
                 num_aggs = cb_nodes    
-            elif cb_nodes > ccl_effective and num_ranks > cb_nodes:
+            elif cb_nodes >= ccl_effective and num_ranks >= cb_nodes:
                 num_aggs = ccl_effective
-            elif ccl_effective > num_ranks and cb_nodes < num_ranks:
+            elif ccl_effective > num_ranks and cb_nodes <= num_ranks:
                 num_aggs = cb_nodes
             else:
                 num_aggs = num_ranks

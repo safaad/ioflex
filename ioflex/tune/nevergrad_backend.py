@@ -15,7 +15,7 @@ from ioflex.common import (
     set_hints_with_ioflex,
     set_hints_env_romio,
     set_hints_env_cray,
-    are_cray_hints_valid,
+    repair_cray_hints_valid,
     remove_path,
     get_bandwidth_darshan,
     OPTIMIZER_MAP,
@@ -42,11 +42,8 @@ def eval_func(**kwargs):
     for key in config_space.keys():
         sample_instance[key] = kwargs[key]
 
-    if enable_pruning and hints == "cray" and not are_cray_hints_valid(
-        sample_instance, num_ranks, num_nodes
-    ):
-        print("Invalid hints combinations")
-        return PENALTY_SCORE
+    if hints == "cray":
+        repair_cray_hints_valid(sample_instance, num_ranks, num_nodes)
 
     if ioflexset:
         set_hints_with_ioflex(sample_instance, config_path)
@@ -185,13 +182,6 @@ def run(args=None):
         choices=["romio", "cray", "ompio"],
     )
     ap.add_argument(
-        "-p",
-        "--enable_pruning",
-        action="store_true",
-        default=False,
-        help="Enable pruning invalid configurations or non-promising runs",
-    )
-    ap.add_argument(
         "-b",
         "--tune_bandwidth",
         action="store_true",
@@ -211,7 +201,6 @@ def run(args=None):
     run_app = " ".join(args["cmd"])
     tune_bandwidth = args["tune_bandwidth"]
 
-    enable_pruning = args["enable_pruning"]
     outfilepath = args["outfile"]
     try:
         outfile = open(outfilepath, "w")

@@ -237,17 +237,17 @@ def repair_cray_hints_valid(config_dict, num_ranks, num_nodes):
     if config_dict.get("cray_cb_write_lock_mode") == 1:
         if config_dict.get("romio_no_indep_rw") == "false":
             config_dict["cray_cb_write_lock_mode"] = 0
-            print("Updated cray_cb_write_lock_mode=0")
+            # print("Updated cray_cb_write_lock_mode=0")
         if config_dict.get("romio_cb_write") == "disable" or config_dict.get("romio_cb_read") == "disable":
             config_dict["cray_cb_write_lock_mode"] = 0
             config_dict["romio_no_indep_rw"] = "false"
-            print("Updated cray_cb_write_lock_mode=0")
+            # print("Updated cray_cb_write_lock_mode=0")
 
     # romio_no_indep_rw needs both collective buffering enabled
     if config_dict.get("romio_no_indep_rw") == "true":
         if config_dict.get("romio_cb_read") == "disable" or config_dict.get("romio_cb_write") == "disable":
             config_dict["romio_no_indep_rw"] = "false"
-            print("Updated romio_no_indep_rw=false")
+            # print("Updated romio_no_indep_rw=false")
 
     config_dict["cb_nodes"] = compute_num_aggregators(config_dict, num_ranks, num_nodes)
     

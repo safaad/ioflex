@@ -35,6 +35,7 @@ def get_optimizer(optimizer_name):
 
 def eval_func(**kwargs):
 
+    global outfile, out_is_open
     dir_path = os.environ.get("PWD", os.getcwd())
     config_path = os.path.join(dir_path, "config.conf" if ioflexset else "romio-hints")
 
@@ -85,7 +86,12 @@ def eval_func(**kwargs):
     out, err = process.communicate()
     objective = time.time() - start_time
 
-    outline = f"{configs_str},{objective}"
+    if model:
+        pred = base.predict_instance(model, sample_instance)
+        sample_instance["Predicted-Objective"] = pred
+        
+    sample_instance["elapsedtime"] = objective
+    
     if tune_bandwidth:
         darshan_dir = os.environ["DARSHAN_LOG_DIR_PATH"]
         log_path = os.path.join(darshan_dir, "*.darshan")
@@ -96,25 +102,27 @@ def eval_func(**kwargs):
                 "Darshan file wasn't properly generated. Check the Darshan settings or the application correctness"
             )
             return PENALTY_SCORE
-        outline = f"{outline},{objective}"
+        sample_instance["I/O-Bandwidth-Mib/s"] = objective
         # Transform maximization to minimization problem for bandwidth
         objective = objective * -1
-    if model:
-        pred = base.predict_instance(model, sample_instance)
-        outline = f"{outline},{pred}\n"
-    else:
-        outline = f"{outline}\n"
 
-    outfile.write(outline)
+    if not out_is_open:
+        try:
+            outfile = open(outfilepath, "w")
+            out_is_open = True
+            outfile.write(",".join(sample_instance.keys()) + "\n")
+        except:
+            raise Exception("Cannot create file ", outfilepath)
+    outfile.write(",".join(map(str, sample_instance.values())) + "\n")
 
+    configs_str = ", ".join(f"{k}: {v}" for k, v in sample_instance.items())
     if logisset:
         logfile_o.write(f"Config: {configs_str}\n\n{out.decode()}\n")
         logfile_e.write(f"Config: {configs_str}\n\n{err.decode()}\n")
+    print(f"Running config: {configs_str}")
 
     for f in files_to_clean:
         remove_path(f)
-
-    print(f"Running config: {outline}")
 
     return objective
 
@@ -196,16 +204,14 @@ def run(args=None):
     )
     args = vars(ap.parse_args(args))
 
-    global num_ranks, num_nodes, ioflexset, run_app, outfile, logisset, logfile_o, logfile_e, tune_bandwidth, files_to_clean, files_to_stripe, enable_pruning
+    global num_ranks, num_nodes, ioflexset, run_app, outfile, outfilepath, logisset, logfile_o, logfile_e, tune_bandwidth, files_to_clean, files_to_stripe, enable_pruning
     ioflexset = args["ioflex"]
     run_app = " ".join(args["cmd"])
     tune_bandwidth = args["tune_bandwidth"]
 
     outfilepath = args["outfile"]
-    try:
-        outfile = open(outfilepath, "w")
-    except:
-        raise Exception("Cannot create file ", outfilepath)
+    global out_is_open
+    out_is_open = False
     outdir = os.path.dirname(os.path.abspath(outfilepath))
 
     num_ranks = args["num_ranks"]
@@ -243,16 +249,6 @@ def run(args=None):
         }
     )
 
-    header_items = list(config_space.keys())
-    header_items.append("elapsedtime")
-    if args["tune_bandwidth"]:
-        header_items.append("I/O-Bandwidth-Mib/s")
-
-    if args["with_model"]:
-        header_items.append("Predicted-Objective")
-
-    outfile.write(",".join(header_items) + "\n")
-
     ngoptimizer = get_optimizer(opt_name)
 
     optimizer = ngoptimizer(parametrization=params, budget=max_trials)
@@ -273,7 +269,8 @@ def run(args=None):
     with open(bestpath, "w") as f:
         json.dump(recommendation.value[1], f, indent=4)
 
-    outfile.close()
+    if out_is_open:
+        outfile.close()
     if logisset:
         logfile_o.close()
         logfile_e.close()

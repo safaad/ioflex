@@ -45,9 +45,9 @@ def eval_func(
     trial,
     config,
     model=None,
-    max_retries: int = 20,
 ):
 
+    global outfile, out_is_open
     dir_path = os.environ.get("PWD", os.getcwd())
     config_path = os.path.join(dir_path, "config.conf" if ioflexset else "romio-hints")
 
@@ -57,9 +57,9 @@ def eval_func(
             continue
         sample_instance[key] = trial.suggest_categorical(key, values)
 
-    if hints == "cray":    
+    if hints == "cray":
         repair_cray_hints_valid(sample_instance, num_ranks, num_nodes)
-    
+
     if ioflexset:
         set_hints_with_ioflex(sample_instance, config_path)
         os.environ["IOFLEX_HINTS"] = config_path
@@ -72,8 +72,6 @@ def eval_func(
             os.environ["MPICH_MPIIO_HINTS"] = crayhints
         # if hints == "ompio":
         #  TODO
-
-    configs_str = ",".join(map(str, sample_instance.values()))
 
     stripe_count = (
         int(sample_instance["striping_factor"])
@@ -100,7 +98,12 @@ def eval_func(
     out, err = process.communicate()
     objective = time.time() - start_time
 
-    outline = f"{configs_str},{objective}"
+    if model:
+        pred = base.predict_instance(model, sample_instance)
+        sample_instance["Predicted-Objective"] = pred
+
+    sample_instance["elapsedtime"] = objective
+
     if tune_bandwidth:
         darshan_dir = os.environ["DARSHAN_LOG_DIR_PATH"]
         log_path = os.path.join(darshan_dir, "*.darshan")
@@ -111,23 +114,25 @@ def eval_func(
                 "Darshan file wasn't properly generated. Check the Darshan settings or the application correctness"
             )
             raise TrialPruned()
-        outline = f"{outline},{objective}"
-    if model:
-        pred = base.predict_instance(model, sample_instance)
-        outline = f"{outline},{pred}\n"
-    else:
-        outline = f"{outline}\n"
+        sample_instance["I/O-Bandwidth-Mib/s"] = objective
 
-    outfile.write(outline)
+    if not out_is_open:
+        try:
+            outfile = open(outfilepath, "w")
+            out_is_open = True
+            outfile.write(",".join(sample_instance.keys()) + "\n")
+        except:
+            raise Exception("Cannot create file ", outfilepath)
+    outfile.write(",".join(map(str, sample_instance.values())) + "\n")
 
+    configs_str = ", ".join(f"{k}: {v}" for k, v in sample_instance.items())
     if logisset:
-        logfile_o.write(f"Config: {outline}\n\n{out.decode()}\n")
-        logfile_e.write(f"Config: {outline}\n\n{err.decode()}\n")
+        logfile_o.write(f"Config: {configs_str}\n\n{out.decode()}\n")
+        logfile_e.write(f"Config: {configs_str}\n\n{err.decode()}\n")
+    print(f"Running config: {configs_str}")
 
     for f in files_to_clean:
         remove_path(f)
-
-    print(f"Running config: {outline}")
 
     return objective
 
@@ -208,16 +213,15 @@ def run(args=None):
     )
     args = vars(ap.parse_args(args))
 
-    global num_ranks, num_nodes, ioflexset, run_app, outfile, logisset, logfile_o, logfile_e, hints, tune_bandwidth, files_to_clean, files_to_stripe
+    global num_ranks, num_nodes, ioflexset, run_app, outfilepath, outfile, logisset, logfile_o, logfile_e, hints, tune_bandwidth, files_to_clean, files_to_stripe
     ioflexset = args["ioflex"]
     run_app = " ".join(args["cmd"])
     tune_bandwidth = args["tune_bandwidth"]
 
     outfilepath = args["outfile"]
-    try:
-        outfile = open(outfilepath, "w")
-    except:
-        raise Exception("Cannot create file ", outfilepath)
+    global out_is_open
+    out_is_open = False
+
     outdir = os.path.dirname(os.path.abspath(outfilepath))
 
     num_ranks = args["num_ranks"]
@@ -238,16 +242,6 @@ def run(args=None):
 
     CONFIG_MAP, files_to_clean, files_to_stripe = get_config_map(hints, config_path)
     config_space = {key: value for key, value in sorted(CONFIG_MAP.items()) if value}
-    header_items = list(config_space.keys())
-
-    header_items.append("elapsedtime")
-    if args["tune_bandwidth"]:
-        header_items.append("I/O-Bandwidth-Mib/s")
-
-    if args["with_model"]:
-        header_items.append("Predicted-Objective")
-
-    outfile.write(",".join(header_items) + "\n")
 
     sampler = get_sampler(args["sampler"], config_space)
 
@@ -273,7 +267,8 @@ def run(args=None):
         json.dump(study.best_trial.params, f, indent=4)
     joblib.dump(study, args["outoptuna"])
 
-    outfile.close()
+    if out_is_open:
+        outfile.close()
     if logisset:
         logfile_o.close()
         logfile_e.close()

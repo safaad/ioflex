@@ -252,7 +252,6 @@ def repair_cray_hints_valid(config_dict, num_ranks, num_nodes):
     config_dict["cb_nodes"] = compute_num_aggregators(config_dict, num_ranks, num_nodes)
     
 
-
 def get_bandwidth_darshan(log_path, mod):
 
     darshan_files = glob.glob(log_path)
@@ -273,6 +272,7 @@ def get_bandwidth_darshan(log_path, mod):
     os.remove(log_file)
 
     return bandwidth_slowest
+
 def remove_path(path_pattern: str):
 
     matches = glob.glob(path_pattern, recursive=True)

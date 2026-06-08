@@ -7,19 +7,18 @@ import subprocess
 from pathlib import Path
 import pandas as pd
 import numpy as np
+import math
 from datetime import datetime
 from shutil import rmtree
 from scipy.stats import qmc
 import ioflex.model.parser as parser
-import glob
 from tqdm.auto import tqdm
-from ioflex.common import SAMPLER_MAP, PRUNER_MAP
 from ioflex.common import (
     get_config_map,
     set_hints_with_ioflex,
     set_hints_env_romio,
     set_hints_env_cray,
-    are_cray_hints_valid,
+    repair_cray_hints_valid,
     get_bandwidth_darshan,
     remove_path,
 )
@@ -27,12 +26,17 @@ from ioflex.common import (
 from ioflex.striping import setstriping
 
 
+def round_to_nearest_square(n):
+    return round(math.sqrt(n)) ** 2
+
 def generate_lhs_samples(config_space, nsamples):
     
     param_keys = config_space.keys()
     param_grid = config_space.values()
     n_dims = len(param_grid)
-    lhs = qmc.LatinHypercube(d=n_dims)
+    lhs = qmc.LatinHypercube(d=n_dims, optimization='lloyd')
+
+    print(f"Number of samples is: ",nsamples)
     lhs_samples = lhs.random(n=nsamples)
 
     sampled_configs = []
@@ -48,6 +52,7 @@ def generate_lhs_samples(config_space, nsamples):
 
 def eval_runs(samples_config, nsamples):
 
+    global outfile, out_is_open
     dir_path = os.environ.get("PWD", os.getcwd())
     config_path = os.path.join(dir_path, "config.conf" if ioflexset else "romio-hints")
 
@@ -55,9 +60,8 @@ def eval_runs(samples_config, nsamples):
         sample_instance = samples_config[i]
         if hints == "cray":
             # if options are not valid skip the trial
-            if not are_cray_hints_valid(sample_instance, num_ranks, num_nodes):
-                print("Skipped instance")
-                continue
+            repair_cray_hints_valid(sample_instance, num_ranks, num_nodes)
+
 
         if ioflexset:
             set_hints_with_ioflex(sample_instance, config_path)
@@ -72,7 +76,7 @@ def eval_runs(samples_config, nsamples):
             # if hints == "ompio":
             #  TODO
 
-        configs_str = ",".join(map(str, sample_instance.values()))
+
         stripe_count = (
             int(sample_instance["striping_factor"])
             if "striping_factor" in sample_instance
@@ -98,27 +102,36 @@ def eval_runs(samples_config, nsamples):
         out, err = process.communicate()
         objective = time.time() - start_time
 
-        outline = f"{configs_str},{objective}"
+        sample_instance["elapsedtime"] = objective
         if tune_bandwidth:
             darshan_dir = os.environ["DARSHAN_LOG_DIR_PATH"]
             log_path = os.path.join(darshan_dir, "*.darshan")
             # get MPI-IO bandwidth MiB/s
             objective = get_bandwidth_darshan(log_path, "MPI-IO")
             if objective == -1:
-                print("Invalid Run")
+                print(
+                    "Darshan file wasn't properly generated. Check the Darshan settings or the application correctness"
+                )
                 continue
-            outline = f"{outline},{objective}\n"
+            sample_instance["I/O-Bandwidth-Mib/s"] = objective
 
-        outfile.write(outline)
+        if not out_is_open:
+            try:
+                outfile = open(outfilepath, "w")
+                out_is_open = True
+                outfile.write(",".join(sample_instance.keys()) + "\n")
+            except:
+                raise Exception("Cannot create file ", outfilepath)
+        outfile.write(",".join(map(str, sample_instance.values())) + "\n")
 
+        configs_str = ", ".join(f"{k}: {v}" for k, v in sample_instance.items())
         if logisset:
-            logfile_o.write(f"Config: {outline}\n\n{out.decode()}\n")
-            logfile_e.write(f"Config: {outline}\n\n{err.decode()}\n")
+            logfile_o.write(f"Config: {configs_str}\n\n{out.decode()}\n")
+            logfile_e.write(f"Config: {configs_str}\n\n{err.decode()}\n")
+        print(f"Running config: {configs_str}")
 
         for f in files_to_clean:
             remove_path(f)
-
-        print(f"Running config: {outline}")
 
 
 def run(args=None):
@@ -166,9 +179,6 @@ def run(args=None):
     ap.add_argument("--nsamples", type=int, default=50, help="Number of samples")
 
     ap.add_argument(
-        "--darshan_path", type=str, default=None, help="Path to Darshan output"
-    )
-    ap.add_argument(
         "--with_log_path", type=str, default=None, help="Output logging path"
     )
     ap.add_argument(
@@ -181,16 +191,16 @@ def run(args=None):
     )
     args = vars(ap.parse_args(args))
 
-    global num_ranks, num_nodes, ioflexset, run_app, outfile, logisset, logfile_o, logfile_e, hints, tune_bandwidth, files_to_clean, files_to_stripe
+    global num_ranks, num_nodes, ioflexset, run_app, outfilepath, outfile, logisset, logfile_o, logfile_e, hints, tune_bandwidth, files_to_clean, files_to_stripe
     ioflexset = args["ioflex"]
     run_app = " ".join(args["cmd"])
     tune_bandwidth = args["tune_bandwidth"]
 
     outfilepath = args["outfile"]
-    try:
-        outfile = open(outfilepath, "w")
-    except:
-        raise Exception("Cannot create file ", outfilepath)
+    global out_is_open
+    out_is_open = False
+
+    outdir = os.path.dirname(os.path.abspath(outfilepath))
 
     num_ranks = args["num_ranks"]
     num_nodes = args["num_nodes"]
@@ -209,24 +219,14 @@ def run(args=None):
 
     CONFIG_MAP, files_to_clean, files_to_stripe = get_config_map(hints, config_path)
     config_space = {key: value for key, value in sorted(CONFIG_MAP.items()) if value}
-    header_items = list(config_space.keys())
 
-    header_items.append("elapsedtime")
-    if args["tune_bandwidth"]:
-        header_items.append("I/O-Bandwidth-Mib/s")
 
-    outfile.write(",".join(header_items) + "\n")
-
-    # Get Samples Configuration
-    samples_config = generate_lhs_samples(
-        config_space,
-        nsamples,
-    )
-
+    lhs_samples = generate_lhs_samples(config_space, nsamples)
     # Run with Samples
-    eval_runs(samples_config, nsamples)
+    eval_runs(lhs_samples, nsamples)
 
-    outfile.close()
+    if out_is_open:
+        outfile.close()
     if logisset:
         logfile_o.close()
         logfile_e.close()

@@ -37,8 +37,12 @@ def main():
             from .model import predict
             predict_args = sys.argv[sys.argv.index("--predict") + 1 :]
             predict.run(predict_args)
+        elif "--rank" in sys.argv:
+            from .model import rank
+            rank_args = sys.argv[sys.argv.index("--rank") + 1 :]
+            rank.run(rank_args)
         else:
-           print("Please specify a subcommand: --train, --sample, or --predict") 
+           print("Please specify a subcommand: --train, --sample, --rank, or --predict") 
     else:
         print(f"Unknown command: {command}")
 

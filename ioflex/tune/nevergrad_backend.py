@@ -61,11 +61,7 @@ def eval_func(**kwargs):
 
     configs_str = ",".join(map(str, sample_instance.values()))
 
-    stripe_count = (
-        int(sample_instance["striping_factor"])
-        if "striping_factor" in sample_instance
-        else 8
-    )
+    stripe_count = int(sample_instance.get("striping_factor", 8))
     stripe_size = (
         str(sample_instance["striping_unit"] // 1048576) + "M"
         if "striping_unit" in sample_instance

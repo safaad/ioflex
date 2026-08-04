@@ -56,6 +56,7 @@ SCALE_COLS = [
 ]
 HINT_ORDER = {"disable": 0, "automatic": 1, "enable": 2}
 THREE_STATE = ["romio_cb_read", "romio_cb_write", "romio_ds_read", "romio_ds_write"]
+CAT_FEATURES = THREE_STATE + ["romio_no_indep_rw", "cray_cb_write_lock_mode"]
 LABEL_TO_GAIN = {0: 0, 1: 1, 2: 5, 3: 15}
 
 LGBM_PARAMS = {
@@ -146,9 +147,20 @@ def transform_features(df: pd.DataFrame) -> pd.DataFrame:
                 f"'{col}' unmapped values: {df[col][mapped.isna()].unique()}"
             )
         df[col] = mapped
-    df["romio_no_indep_rw"] = df["romio_no_indep_rw"].map({True: 1, False: 0})
-    if df["romio_no_indep_rw"].isna().any():
-        raise ValueError("'romio_no_indep_rw' has unmapped values.")
+
+    mapped_bool = (
+        df["romio_no_indep_rw"]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .map({"true": 1, "false": 0})
+    )
+    if mapped_bool.isna().any():
+        raise ValueError(
+            f"'romio_no_indep_rw' unmapped values: "
+            f"{df['romio_no_indep_rw'][mapped_bool.isna()].unique()}"
+        )
+    df["romio_no_indep_rw"] = mapped_bool
     return df
 
 
@@ -339,9 +351,9 @@ def active_learning_loop_single(
     top_k: int = 10,
     k_values: list = [5, 10],
 ):
-    assert model_name in MODEL_REGISTRY, (
-        f"Unknown model '{model_name}'. Choose from: {list(MODEL_REGISTRY.keys())}"
-    )
+    assert (
+        model_name in MODEL_REGISTRY
+    ), f"Unknown model '{model_name}'. Choose from: {list(MODEL_REGISTRY.keys())}"
 
     labelled = df_train.copy()
     unlabelled = df_test.copy()
@@ -432,7 +444,11 @@ def active_learning_loop_single(
             y_score=picked["score"].values,
             k_values=[k for k in k_values if k <= len(picked)],
         )
-        print_metrics(batch_metrics, label=f"iter {iteration}", k_values=[k for k in k_values if k <= len(picked)])
+        print_metrics(
+            batch_metrics,
+            label=f"iter {iteration}",
+            k_values=[k for k in k_values if k <= len(picked)],
+        )
 
         iter_row = {
             "iteration": iteration,
@@ -580,7 +596,9 @@ def eval_runs(
     failed = picked_df["ratio"].isna().sum()
     if failed:
         print(f"{failed} picks failed labeling and are dropped.")
-    picked_df = picked_df.dropna(subset=["ratio"])  # keep original index — needed to realign scores
+    picked_df = picked_df.dropna(
+        subset=["ratio"]
+    )
     return picked_df
 
 
@@ -637,10 +655,7 @@ def run(args=None):
         "--nsamples", type=int, default=30, help="Number of pool LHS samples"
     )
     ap.add_argument(
-        "--samples_csv",
-        type=str,
-        default=None,
-        help="CSV of pre-generated configs"
+        "--samples_csv", type=str, default=None, help="CSV of pre-generated configs"
     )
     ap.add_argument(
         "--with_log_path", type=str, default=None, help="Output logging path"
@@ -711,7 +726,6 @@ def run(args=None):
         logfile_o = open(os.path.join(args["with_log_path"], f"out.{timestamp}"), "w")
         logfile_e = open(os.path.join(args["with_log_path"], f"err.{timestamp}"), "w")
 
-
     hints = args["with_hints"]
     config_path = args["config"]
 
@@ -768,4 +782,3 @@ def run(args=None):
     if logisset:
         logfile_o.close()
         logfile_e.close()
-

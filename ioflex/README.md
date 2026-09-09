@@ -94,7 +94,7 @@ pip -e install .
 
 ### IOFlex -- Usage of Tuning Backends
 
-IOFlex can be invoked as a module. The `tune` subcommand accepts flags to which backend to use. The backends include Optuna `--optuna`, Ray Tune `--ray`, and Nevergrad `--nevergrad`. Each backend has its own options.
+IOFlex can be invoked as a module. The `tune` subcommand accepts flags to which backend to use. The backends include Optuna `--optuna` and Nevergrad `--nevergrad`. Each backend has its own options.
 
 ```bash
 python -m ioflex tune [BACKEND] [options...]
@@ -142,52 +142,7 @@ Options:
   --config CONFIG       Path to JSON configuration file (default: ../configs/tune_config_romio.json
 ```
 
-#### 2. Ray Tune Backend
-
-```bash
-usage: ioflex tune --ray [-h] [--ioflex] [--outfile OUTFILE] [--outray OUTRAY] [--prev PREV] --num_ranks
-                   NUM_RANKS --num_nodes NUM_NODES --cmd [CMD ...] [--max_trials MAX_TRIALS]
-                   [--tuner {optuna,ax,bohb,hyperopt,nevergrad,zoopt}]
-                   [--optimizer {ngioh,twopde,pdopo,tbpsa,ngopt}]
-                   [--sampler {tpe,rand,gp,nsga,brute,grid,auto}] [--with_log_path WITH_LOG_PATH]
-                   [--with_model WITH_MODEL] [--with_hints {romio,cray,ompio}] [-b] [--config CONFIG]
-```
-
-Options:
-
-```
-options:
-  -h, --help            show this help message and exit
-  --ioflex              Enable IOFlex
-  --outfile OUTFILE     Path to Results CSV file
-  --outray OUTRAY, -r OUTRAY
-                        Path to RayTune results dir
-  --prev PREV, -p PREV  Path to the directory with previous ray experiments
-  --num_ranks NUM_RANKS, -np NUM_RANKS
-                        Number of ranks used to run the program
-  --num_nodes NUM_NODES, -n NUM_NODES
-                        Number of nodes allocated
-  --cmd [CMD ...], -c [CMD ...]
-                        Application command line
-  --max_trials MAX_TRIALS
-                        Max number of trials
-  --tuner {optuna,ax,bohb,hyperopt,nevergrad,zoopt}, -t {optuna,ax,bohb,hyperopt,nevergrad,zoopt}
-                        Ray Tune Search Algorithms
-  --optimizer {ngioh,twopde,pdopo,tbpsa,ngopt}
-                        Nevergrad optimizer algorithm, only valid if nevergrad is enabled
-  --sampler {tpe,rand,gp,nsga,brute,grid,auto}
-                        Optuna samplers, only valid if optuna is enabled
-  --with_log_path WITH_LOG_PATH
-                        Output logging path
-  --with_model WITH_MODEL
-                        Path to trained prediction model
-  --with_hints {romio,cray,ompio}
-                        MPIIO hints mode
-  -b, --tune_bandwidth  Use I/O bandwidth as the tuning objective
-  --config CONFIG       Path to JSON configuration file (default: ../configs tune_config_romio.json
-```
-
-### 3. Nevergrad
+### 2. Nevergrad
 
 ```bash
 usage: ioflex tune --nevergrad [-h] [--ioflex] [--outfile OUTFILE] [--inng INNG] [--outng OUTNG] --num_ranks NUM_RANKS

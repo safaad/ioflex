@@ -950,6 +950,7 @@ def eval_runs(
                     "Darshan file wasn't properly generated. "
                     "Check the Darshan settings or the application correctness"
                 )
+                bandwidths.append(None)
                 ratios.append(None)
                 for f in files_to_clean:
                     remove_path(f)

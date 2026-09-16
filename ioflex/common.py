@@ -1,6 +1,7 @@
 import os
 import glob
 import shutil
+import pandas as pd
 import optuna
 import nevergrad as ng
 import numpy as np
@@ -74,18 +75,16 @@ def get_config_map(hints, config_path):
     }.get(
         hints, CONFIG_ROMIO_KEY
     )  # Use ROMIO as default fallback
-    
 
-    
     try:
-        with open(config_path, 'r') as file:
+        with open(config_path, "r") as file:
             configdata = json.load(file)
     except FileNotFoundError:
         print("Error: The file config.json was not found.")
-    
+
     files_to_clean = configdata["files_to_clean"]
     files_to_stripe = configdata["files_to_stripe"]
-    
+
     CONFIG_MAP = {}
     for key, values in configdata.items():
         if key == "files_to_clean" or key == "files_to_stripe":
@@ -94,7 +93,7 @@ def get_config_map(hints, config_path):
             print(key)
             raise KeyError("Invalid or unsupported hint")
         CONFIG_MAP[key] = values
-    
+
     return CONFIG_MAP, files_to_clean, files_to_stripe
 
 
@@ -177,19 +176,24 @@ def compute_num_aggregators(config_dict, num_ranks, num_nodes):
     Returns:
         dict: config_dict
     """
-    cb_multi  = config_dict.get("cray_cb_nodes_multiplier", 1)
-    sf        = config_dict.get("striping_factor")
-    cb_nodes  = config_dict.get("cb_nodes")
-    ccl       = config_dict.get("cb_config_list")
+    cb_multi = config_dict.get("cray_cb_nodes_multiplier", 1)
+    sf = config_dict.get("striping_factor")
+    cb_nodes = config_dict.get("cb_nodes")
+    ccl = config_dict.get("cb_config_list")
+    lock_mode = config_dict.get("cray_cb_write_lock_mode")
 
     num_aggs = cb_nodes
-    if cb_nodes is not None:
+    if cb_nodes is not None and (lock_mode == 0 or lock_mode is None):
         if ccl is not None:
-            ppn = int(ccl.split(":")[1]) if ccl.split(":")[1] != "*" else num_ranks//num_nodes
+            ppn = (
+                int(ccl.split(":")[1])
+                if ccl.split(":")[1] != "*"
+                else num_ranks // num_nodes
+            )
             ccl_effective = ppn * num_nodes
 
             if ccl_effective > cb_nodes and ccl_effective <= num_ranks:
-                num_aggs = cb_nodes    
+                num_aggs = cb_nodes
             elif cb_nodes >= ccl_effective and num_ranks >= cb_nodes:
                 num_aggs = ccl_effective
             elif ccl_effective > num_ranks and cb_nodes <= num_ranks:
@@ -201,17 +205,25 @@ def compute_num_aggregators(config_dict, num_ranks, num_nodes):
         else:
             num_aggs = num_ranks
     else:
-        
+
         if ccl is not None and sf is not None and sf != -1:
-            ppn = int(ccl.split(":")[1]) if ccl.split(":")[1] != "*" else num_ranks//num_nodes
+            ppn = (
+                int(ccl.split(":")[1])
+                if ccl.split(":")[1] != "*"
+                else num_ranks // num_nodes
+            )
             ccl_effective = ppn * num_nodes
-            
+
             sf_effective = sf * cb_multi
             num_aggs = min(ccl_effective, sf_effective, num_ranks)
         elif ccl is not None:
-            ppn = int(ccl.split(":")[1]) if ccl.split(":")[1] != "*" else num_ranks//num_nodes
+            ppn = (
+                int(ccl.split(":")[1])
+                if ccl.split(":")[1] != "*"
+                else num_ranks // num_nodes
+            )
             ccl_effective = ppn * num_nodes
-             
+
             num_aggs = min(ccl_effective, num_ranks)
         elif sf is not None and sf != -1:
             sf_effective = sf * cb_multi
@@ -219,6 +231,7 @@ def compute_num_aggregators(config_dict, num_ranks, num_nodes):
         else:
             num_aggs = num_ranks
     return num_aggs
+
 
 def repair_cray_hints_valid(config_dict, num_ranks, num_nodes):
     """Validates Cray MPI-IO hint combinations
@@ -233,24 +246,126 @@ def repair_cray_hints_valid(config_dict, num_ranks, num_nodes):
         str: Reason for invalidation
     """
 
-    # cray_cb_write_lock_mode conflicts        
+    # cray_cb_write_lock_mode conflicts
     if config_dict.get("cray_cb_write_lock_mode") == 1:
         if config_dict.get("romio_no_indep_rw") == "false":
             config_dict["cray_cb_write_lock_mode"] = 0
-            # print("Updated cray_cb_write_lock_mode=0")
-        if config_dict.get("romio_cb_write") == "disable" or config_dict.get("romio_cb_read") == "disable":
+        if (
+            config_dict.get("romio_cb_write") == "disable"
+            or config_dict.get("romio_cb_read") == "disable"
+        ):
             config_dict["cray_cb_write_lock_mode"] = 0
             config_dict["romio_no_indep_rw"] = "false"
-            # print("Updated cray_cb_write_lock_mode=0")
 
     # romio_no_indep_rw needs both collective buffering enabled
     if config_dict.get("romio_no_indep_rw") == "true":
-        if config_dict.get("romio_cb_read") == "disable" or config_dict.get("romio_cb_write") == "disable":
+        if (
+            config_dict.get("romio_cb_read") == "disable"
+            or config_dict.get("romio_cb_write") == "disable"
+        ):
             config_dict["romio_no_indep_rw"] = "false"
-            # print("Updated romio_no_indep_rw=false")
 
     config_dict["cb_nodes"] = compute_num_aggregators(config_dict, num_ranks, num_nodes)
-    
+
+
+def compute_num_aggregators_row(row: pd.Series) -> float:
+    cb_multi = row.get("cray_cb_nodes_multiplier", 1)
+    sf = row.get("striping_factor")
+    cb_nodes = row.get("cb_nodes")
+    ccl = row.get("cb_config_list")
+    lock_mode = row.get("cray_cb_write_lock_mode")
+    num_ranks = row["num_ranks"]
+    num_nodes = row["nodes"]
+
+    if pd.isna(sf):
+        sf = None
+    if pd.isna(cb_nodes):
+        cb_nodes = None
+    if pd.isna(ccl):
+        ccl = None
+    if pd.isna(lock_mode):
+        lock_mode = None
+
+    num_aggs = cb_nodes
+    if cb_nodes is not None and (lock_mode == 0 or lock_mode is None):
+
+        if ccl is not None:
+            ppn = (
+                int(ccl.split(":")[1])
+                if ccl.split(":")[1] != "*"
+                else num_ranks // num_nodes
+            )
+            ccl_effective = ppn * num_nodes
+
+            if ccl_effective > cb_nodes and ccl_effective <= num_ranks:
+                num_aggs = cb_nodes
+            elif cb_nodes >= ccl_effective and num_ranks >= cb_nodes:
+                num_aggs = ccl_effective
+            elif ccl_effective > num_ranks and cb_nodes <= num_ranks:
+                num_aggs = cb_nodes
+            else:
+                num_aggs = num_ranks
+        elif cb_nodes < num_ranks:
+            num_aggs = cb_nodes
+        else:
+            num_aggs = num_ranks
+    else:
+        if ccl is not None and sf is not None and sf != -1:
+            ppn = (
+                int(ccl.split(":")[1])
+                if ccl.split(":")[1] != "*"
+                else num_ranks // num_nodes
+            )
+            ccl_effective = ppn * num_nodes
+            sf_effective = sf * cb_multi
+            num_aggs = min(ccl_effective, sf_effective, num_ranks)
+        elif ccl is not None:
+            ppn = (
+                int(ccl.split(":")[1])
+                if ccl.split(":")[1] != "*"
+                else num_ranks // num_nodes
+            )
+            ccl_effective = ppn * num_nodes
+            num_aggs = min(ccl_effective, num_ranks)
+        elif sf is not None and sf != -1:
+            sf_effective = sf * cb_multi
+            num_aggs = min(sf_effective, num_ranks)
+        else:
+            num_aggs = num_ranks
+    return num_aggs
+
+
+def repair_cray_hints_valid_row(row: pd.Series) -> pd.Series:
+    row = row.copy()
+
+    # cray_cb_write_lock_mode conflicts
+    if row.get("cray_cb_write_lock_mode") == 1:
+        if row.get("romio_no_indep_rw") == "false":
+            row["cray_cb_write_lock_mode"] = 0
+        if (
+            row.get("romio_cb_write") == "disable"
+            or row.get("romio_cb_read") == "disable"
+        ):
+            row["cray_cb_write_lock_mode"] = 0
+            row["romio_no_indep_rw"] = "false"
+
+    # romio_no_indep_rw needs both collective buffering enabled
+    if row.get("romio_no_indep_rw") == "true":
+        if (
+            row.get("romio_cb_read") == "disable"
+            or row.get("romio_cb_write") == "disable"
+        ):
+            row["romio_no_indep_rw"] = "false"
+
+    row["cb_nodes"] = compute_num_aggregators_row(row)
+    return row
+
+
+def repair_cray_hints_valid_df(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.apply(repair_cray_hints_valid_row, axis=1)
+    df.drop_duplicates(inplace=True, ignore_index=True)
+    return df
+
 
 def get_bandwidth_darshan(log_path, mod):
 
@@ -272,6 +387,7 @@ def get_bandwidth_darshan(log_path, mod):
     os.remove(log_file)
 
     return bandwidth_slowest
+
 
 def remove_path(path_pattern: str):
 

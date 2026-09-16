@@ -14,31 +14,24 @@ def main():
             from .tune import optuna_backend
             optuna_args = sys.argv[sys.argv.index("--optuna") + 1 :]
             optuna_backend.run(optuna_args)
-        elif "--ray" in sys.argv:
-            from .tune import raytune_backend
-            ray_args = sys.argv[sys.argv.index("--ray") + 1 :]
-            raytune_backend.run(ray_args)
         elif "--nevergrad" in sys.argv:
             from .tune import nevergrad_backend
             nevergrad_args = sys.argv[sys.argv.index("--nevergrad") + 1 :]
             nevergrad_backend.run(nevergrad_args)
         else:
-            print("Please specify a backend: --optuna, --ray, or --nevergrad")
+            print("Please specify a backend: --optuna or --nevergrad")
     elif command == "model":
-        if "--train" in sys.argv:
-            from .model import base
-            train_args = sys.argv[sys.argv.index("--train") + 1 :]
-            base.run(train_args)
-        elif "--sample" in sys.argv:
+
+        if "--sample" in sys.argv:
             from .model import sampler
             sampler_args = sys.argv[sys.argv.index("--sample") + 1 :]
             sampler.run(sampler_args)
-        elif "--predict" in sys.argv:
-            from .model import predict
-            predict_args = sys.argv[sys.argv.index("--predict") + 1 :]
-            predict.run(predict_args)
+        elif "--rank" in sys.argv:
+            from .model import rank
+            rank_args = sys.argv[sys.argv.index("--rank") + 1 :]
+            rank.run(rank_args)
         else:
-           print("Please specify a subcommand: --train, --sample, or --predict") 
+           print("Please specify a subcommand: --sample or --rank") 
     else:
         print(f"Unknown command: {command}")
 
